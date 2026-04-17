@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import gsap from "gsap";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
@@ -17,19 +18,18 @@ const MERCADO_PADRAO=[
 
 const SEGS=["Digital","Ascensão","Exclusive","Private"];
 const SEG_COLORS={
-  "Digital":    {color:"#38bdf8", bg:"rgba(56,189,248,0.12)",  border:"rgba(56,189,248,0.30)"},
-  "Ascensão":   {color:"#4ade80", bg:"rgba(74,222,128,0.12)",  border:"rgba(74,222,128,0.30)"},
-  "Exclusive":  {color:"#f59e0b", bg:"rgba(245,158,11,0.12)",  border:"rgba(245,158,11,0.30)"},
-  "Private":    {color:"#c084fc", bg:"rgba(192,132,252,0.12)", border:"rgba(192,132,252,0.30)"},
+  "Digital":   {color:"#748CAB", bg:"rgba(116,140,171,0.10)", border:"rgba(116,140,171,0.25)"},
+  "Ascensão":  {color:"#5B9BD5", bg:"rgba(91,155,213,0.10)",  border:"rgba(91,155,213,0.25)"},
+  "Exclusive": {color:"#F0A202", bg:"rgba(240,162,2,0.10)",   border:"rgba(240,162,2,0.28)"},
+  "Private":   {color:"#9E86C8", bg:"rgba(158,134,200,0.10)", border:"rgba(158,134,200,0.25)"},
 };
 // Removido: user-select para evitar cursor piscante não profissional
 const font="-apple-system,'SF Pro Display',sans-serif";
 const BG="#0D1321", CARD="#1D2D44", BD="rgba(62,92,118,0.35)";
 
-function segAuto(p){
-  const v=parseInt(String(p||"0").replace(/\D/g,""))/100;
+function segAuto(v){
   if(v<150000)return"Digital";
-  if(v<400000)return"Ascensão";
+  if(v<500000)return"Ascensão";
   if(v<1000000)return"Exclusive";
   return"Private";
 }
@@ -37,6 +37,15 @@ function brl(v){
   const n=parseInt(String(v||"0").replace(/\D/g,""))/100;
   if(!n)return"—";
   return n.toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2});
+}
+function brlNum(n){
+  if(!n)return"—";
+  return n.toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2});
+}
+const CART_KEYS=["posFixado","ipca","preFixado","acoes","fiis","multi","prevVGBL","prevPGBL","globalEquities","globalTreasury","globalFunds","globalBonds","global"];
+function getPatFin(c){
+  const t=CART_KEYS.reduce((s,k)=>s+parseInt(String(c.carteira?.[k]||"0").replace(/\D/g,""))/100,0);
+  return t>0?t:parseInt(String(c.patrimonio||"0").replace(/\D/g,""))/100;
 }
 
 // Calcula patrimônio total dos clientes
@@ -58,15 +67,32 @@ function contarClientesAtivos(clientes){
 
 // ── Lógica CRM ───────────────────────────────────────────────
 
-// Aporte: verifica se teve aporte registrado este mês
+// Aporte: 3 estados — aportou / parcial / sem_aporte
 function statusAporte(c){
+  if(c.statusAporteMes==="nao_aportou")return"sem_aporte";
+  if(c.statusAporteMes==="aportou"){
+    const meta=parseInt(String(c.metaAporteMensal||"0").replace(/\D/g,""))/100;
+    const reg=parseInt(String(c.aporteRegistradoMes||"0").replace(/\D/g,""))/100;
+    if(meta>0&&reg>0&&reg<meta)return"parcial";
+    return"aportou";
+  }
   if(!c.lastAporteDate)return"sem_aporte";
   try{
     const d=c.lastAporteDate.toDate?c.lastAporteDate.toDate():new Date(c.lastAporteDate);
     const hoje=new Date();
-    if(d.getMonth()===hoje.getMonth()&&d.getFullYear()===hoje.getFullYear())return"aportando";
+    if(d.getMonth()===hoje.getMonth()&&d.getFullYear()===hoje.getFullYear())return"aportou";
   }catch{}
   return"sem_aporte";
+}
+
+// Reserva de emergência
+function statusReserva(c){
+  const gastos=parseInt(String(c.gastosMensaisManual||"0").replace(/\D/g,""))/100;
+  const meta=gastos*6;
+  if(!meta)return null;
+  const liquidez=parseInt(String(c.carteira?.liquidezD1||"0").replace(/\D/g,""))/100
+               ||parseInt(String(c.carteira?.posFixado||"0").replace(/\D/g,""))/100;
+  return liquidez>=meta?"ok":"sem";
 }
 
 // Revisão: obrigatória todo mês até dia 15
@@ -138,36 +164,60 @@ export function AvatarIcon({tipo,size=32}){
   );
 }
 
-// Card cliente — tamanho 100% fixo
-function ClientCard({c,onClick,sAporte,sRevisao,inviavel,followUp}){
+// Card cliente
+function ClientCard({c,onClick,sAporte,sRevisao,inviavel,followUp,sReserva}){
   const bordaAtencao=sAporte==="sem_aporte"||sRevisao==="atrasada"||followUp;
+  const patFin=getPatFin(c);
+  const [hov,setHov]=useState(false);
+
+  let aporteLabel,aporteColor,aporteBg;
+  if(sAporte==="aportou"){
+    aporteLabel="Aporte Feito"; aporteColor="#4ade80"; aporteBg="rgba(74,222,128,0.10)";
+  }else if(sAporte==="parcial"){
+    aporteLabel="Aporte Parcial"; aporteColor="#fbbf24"; aporteBg="rgba(251,191,36,0.10)";
+  }else{
+    aporteLabel="Não Aportou"; aporteColor="#f87171"; aporteBg="rgba(248,113,113,0.10)";
+  }
+
   return(
-    <div onClick={onClick} style={{
-      background:CARD,
-      border:`0.5px solid ${bordaAtencao?"rgba(245,158,11,0.35)":BD}`,
-      borderRadius:14,padding:"13px",cursor:"pointer",
-      height:128,width:"100%",minWidth:0,
-      boxSizing:"border-box",
-      display:"flex",flexDirection:"column",justifyContent:"space-between",
-      overflow:"hidden",
-    }}>
+    <div
+      className="client-card"
+      onClick={onClick}
+      onMouseEnter={()=>setHov(true)}
+      onMouseLeave={()=>setHov(false)}
+      style={{
+        background:hov?"#243756":CARD,
+        border:`0.5px solid ${hov?"rgba(240,162,2,0.35)":bordaAtencao?"rgba(245,158,11,0.28)":BD}`,
+        borderRadius:14,padding:"15px",cursor:"pointer",
+        minHeight:160,width:"100%",minWidth:0,
+        boxSizing:"border-box",
+        display:"flex",flexDirection:"column",gap:10,
+        overflow:"hidden",
+        transition:"background 0.2s, border-color 0.2s, transform 0.18s, box-shadow 0.18s",
+        transform:hov?"translateY(-2px) scale(1.012)":"none",
+        boxShadow:hov?"0 8px 24px rgba(0,0,0,0.45)":"none",
+      }}>
+      {/* Nome + UF + Fee Based */}
       <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
-        <AvatarIcon tipo={c.avatar||"homem"} size={28}/>
+        <AvatarIcon tipo={c.avatar||"homem"} size={30}/>
         <div style={{flex:1,minWidth:0,overflow:"hidden"}}>
           <div style={{fontSize:11,color:"#F0EBD8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.nome}</div>
-          <div style={{fontSize:10,color:"#3E5C76",marginTop:1}}>{c.uf||"—"}</div>
+          <div style={{display:"flex",alignItems:"center",gap:5,marginTop:2}}>
+            <span style={{fontSize:10,color:"#3E5C76"}}>{c.uf||"—"}</span>
+            {c.feeBased&&<span style={{fontSize:8,padding:"1px 6px",borderRadius:20,background:"rgba(34,197,94,0.13)",color:"#22c55e",fontWeight:500,letterSpacing:"0.04em"}}>Fee Based</span>}
+          </div>
         </div>
       </div>
-      <div style={{fontSize:12,color:"#FFB20F",fontWeight:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{brl(c.patrimonio)}</div>
-      <div style={{display:"flex",gap:4,flexWrap:"nowrap",overflow:"hidden"}}>
-        <span style={{fontSize:9,padding:"2px 7px",borderRadius:20,flexShrink:0,
-          background:sAporte==="aportando"?"rgba(34,197,94,0.12)":"rgba(239,68,68,0.12)",
-          color:sAporte==="aportando"?"#22c55e":"#ef4444"}}>
-          {sAporte==="aportando"?"Aportando":"Sem aporte"}
-        </span>
-        {sRevisao==="atrasada"&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(245,158,11,0.12)",color:"#f59e0b",flexShrink:0}}>Revisão</span>}
-        {inviavel&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(239,68,68,0.12)",color:"#ef4444",flexShrink:0}}>Inviável</span>}
-        {followUp&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(168,85,247,0.12)",color:"#a855f7",flexShrink:0}}>Follow-up</span>}
+      {/* Patrimônio Financeiro */}
+      <div style={{fontSize:12,color:"#FFB20F",fontWeight:300,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{brlNum(patFin)}</div>
+      {/* Badges */}
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        <span style={{fontSize:9,padding:"2px 7px",borderRadius:20,flexShrink:0,background:aporteBg,color:aporteColor}}>{aporteLabel}</span>
+        {sReserva==="ok"&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(74,222,128,0.09)",color:"#4ade80",flexShrink:0}}>Reserva OK</span>}
+        {sReserva==="sem"&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(248,113,113,0.09)",color:"#f87171",flexShrink:0}}>Sem Reserva</span>}
+        {sRevisao==="atrasada"&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(251,191,36,0.09)",color:"#fbbf24",flexShrink:0}}>Revisão</span>}
+        {inviavel&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(248,113,113,0.09)",color:"#f87171",flexShrink:0}}>Inviável</span>}
+        {followUp&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:"rgba(167,139,250,0.09)",color:"#a78bfa",flexShrink:0}}>Follow-up</span>}
       </div>
     </div>
   );
@@ -260,6 +310,16 @@ export default function Dashboard(){
     getDocs(collection(db,"clientes")).then(s=>{
       const clientesData=s.docs.map(d=>({id:d.id,...d.data()}));
       setClientes(clientesData);
+      setTimeout(()=>{
+        gsap.fromTo(".client-card",
+          {opacity:0,y:14},
+          {opacity:1,y:0,duration:0.45,stagger:0.06,ease:"power2.out",clearProps:"transform"}
+        );
+        gsap.fromTo(".dashboard-segment-header",
+          {opacity:0,x:-10},
+          {opacity:1,x:0,duration:0.35,stagger:0.08,ease:"power2.out"}
+        );
+      },50);
     }).catch(e=>console.error("Erro ao carregar clientes:",e));
 
     // Atualizar cotações imediatamente na primeira carga
@@ -307,6 +367,7 @@ export default function Dashboard(){
     _sRevisao: statusRevisao(c),
     _inviavel: temInviavel(c),
     _followUp: followUpVencido(c),
+    _sReserva: statusReserva(c),
   }));
 
   // Alertas reais
@@ -319,7 +380,7 @@ export default function Dashboard(){
   const porSeg={};
   SEGS.forEach(s=>{porSeg[s]=[];});
   clientesComStatus.forEach(c=>{
-    const s=c.segmento||segAuto(c.patrimonio);
+    const s=segAuto(getPatFin(c));
     if(porSeg[s])porSeg[s].push(c);
   });
 
@@ -512,7 +573,7 @@ export default function Dashboard(){
                 :clientesFiltrados().map(c=>(
                   <ClientCard key={c.id} c={c} onClick={()=>nav(`/cliente/${c.id}`)}
                     sAporte={c._sAporte} sRevisao={c._sRevisao}
-                    inviavel={c._inviavel} followUp={c._followUp}/>
+                    inviavel={c._inviavel} followUp={c._followUp} sReserva={c._sReserva}/>
                 ))
               }
             </div>
@@ -536,7 +597,7 @@ export default function Dashboard(){
                       porSeg[seg].map(c=>(
                         <ClientCard key={c.id} c={c} onClick={()=>nav(`/cliente/${c.id}`)}
                           sAporte={c._sAporte} sRevisao={c._sRevisao}
-                          inviavel={c._inviavel} followUp={c._followUp}/>
+                          inviavel={c._inviavel} followUp={c._followUp} sReserva={c._sReserva}/>
                       ))
                     )}
                   </div>

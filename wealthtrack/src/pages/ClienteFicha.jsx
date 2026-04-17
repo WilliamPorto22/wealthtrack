@@ -40,7 +40,7 @@ function segmentoAuto(patrimonio) {
   const v = parseCentavos(patrimonio)/100;
   if(v<=0) return null;
   if(v<150000) return "Digital";
-  if(v<400000) return "Ascensão";
+  if(v<500000) return "Ascensão";
   if(v<1000000) return "Exclusive";
   return "Private";
 }
@@ -387,6 +387,7 @@ export default function ClienteFicha() {
     nome:"",codigo:"",email:"",telefone:"",uf:"",
     avatar:"homem",patrimonio:"",aporte:"",desde:"",
     nascimento:"",hobby:"",profissao:"",
+    feeBased:false,
     statusAporteMes:"",nextContactDate:"",notes:"",
     gastosMensaisManual:"",aporteRegistradoMes:"",
     salarioMensal:"",metaAporteMensal:"",
@@ -421,7 +422,7 @@ export default function ClienteFicha() {
       const s = await getDoc(doc(db,"clientes",id));
       if(!s.exists()){setCarregou(true);return;}
       const data={
-        avatar:"homem",statusAporteMes:"",nextContactDate:"",notes:"",
+        avatar:"homem",feeBased:false,statusAporteMes:"",nextContactDate:"",notes:"",
         gastosMensaisManual:"",aporteRegistradoMes:"",
         salarioMensal:"",metaAporteMensal:"",
         imoveis:[],veiculos:[],veiculoValor:"",
@@ -953,6 +954,28 @@ export default function ClienteFicha() {
               <div>
                 <Lbl>Hobby / Interesse</Lbl>
                 <CustomSelect value={snap.hobby} onChange={v=>setFSnap("hobby",v)} options={HOBBIES}/>
+              </div>
+              <div>
+                <Lbl>Modelo de cobrança</Lbl>
+                <button
+                  type="button"
+                  onClick={()=>setFSnap("feeBased",!snap.feeBased)}
+                  style={{
+                    width:"100%",padding:"13px 16px",
+                    background:snap.feeBased?"rgba(34,197,94,0.12)":"rgba(255,255,255,0.04)",
+                    border:snap.feeBased?"0.5px solid rgba(34,197,94,0.40)":"0.5px solid rgba(62,92,118,0.40)",
+                    borderRadius:14,fontSize:14,
+                    color:snap.feeBased?"#22c55e":"#3E5C76",
+                    cursor:"pointer",fontFamily:"inherit",textAlign:"left",
+                    display:"flex",alignItems:"center",justifyContent:"space-between",
+                  }}
+                >
+                  <span>{snap.feeBased?"Fee Based ativo":"Não é Fee Based"}</span>
+                  <span style={{fontSize:10,padding:"2px 8px",borderRadius:20,
+                    background:snap.feeBased?"rgba(34,197,94,0.18)":"rgba(62,92,118,0.18)",
+                    color:snap.feeBased?"#22c55e":"#3E5C76",
+                  }}>{snap.feeBased?"SIM":"NÃO"}</span>
+                </button>
               </div>
             </div>
 
