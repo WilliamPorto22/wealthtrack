@@ -34,7 +34,7 @@ async function _fromPDF(file, onProgress) {
     const items = content.items.filter(it => it.str && it.str.trim());
     if (items.length === 0) { text += "\n"; continue; }
 
-    // Agrupa por Y (topo→base) para reconstruir linhas reais
+    // Agrupa por Y (topo→base) preservando linhas reais
     const lineMap = new Map();
     for (const item of items) {
       const y = Math.round(item.transform[5]);
@@ -46,7 +46,8 @@ async function _fromPDF(file, onProgress) {
     const merged = [];
     for (const y of sortedYs) {
       const prev = merged[merged.length - 1];
-      if (prev && Math.abs(y - prev.y) < 4) {
+      // Aumentado para 8 para ser mais tolerante com alinhamento de colunas
+      if (prev && Math.abs(y - prev.y) < 8) {
         prev.items.push(...lineMap.get(y));
       } else {
         merged.push({ y, items: [...lineMap.get(y)] });
@@ -81,6 +82,8 @@ async function _fromPDF(file, onProgress) {
   }
 
   onProgress(92, "Analisando dados financeiros...");
+  // Log para debug no console do navegador
+  console.log("[WealthTrack] Texto extraído do PDF (primeiros 3000 chars):\n", text.slice(0, 3000));
   return text;
 }
 
@@ -127,144 +130,301 @@ function largestAmountNear(text, pattern, window = 600) {
   return max;
 }
 
+// ── Normalização de texto (remove acentos para comparar) ───────
+
+function norm(s) {
+  return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+}
+
 // ── Detecção de tipo de documento ──────────────────────────────
-// Genérica — funciona para qualquer banco/corretora
+// Usa padrões sem acento para ser resistente a PDFs com codificação customizada
 
 function detectDocType(text) {
-  // Indicadores de extrato / fatura de cartão ou conta corrente
-  const FATURA_RE = [
-    /FATURA.*CART[AÃ]O|CART[AÃ]O.*FATURA/i,
-    /LANÇAMENTOS.*COMPRAS|COMPRAS.*LANÇAMENTOS/i,
-    /ENCARGOS\s+POR\s+ATRASO|JUROS\s+ROTATIVOS/i,
-    /PAGAMENTO\s+(?:M[IÍ]NIMO|TOTAL)\s+DA\s+FATURA/i,
-    /FATURA\s+DO\s+M[EÊ]S|FATURA\s+(?:ATUAL|ANTERIOR)/i,
-    /EXTRATO\s+(?:DA\s+CONTA|BANC[AÁ]RIO)|CONTA\s+CORRENTE/i,
-    /D[EÉ]BITO\s+EM\s+CONTA|CR[EÉ]DITO\s+EM\s+CONTA/i,
-  ];
-  for (const re of FATURA_RE) {
-    if (re.test(text) && /\d{2}\/\d{2}[\s\/\d]*\s+.+\s+[\d.]+,\d{2}/m.test(text)) return "fatura";
-  }
-  // Se há muitas linhas com padrão transação (DD/MM NOME VALOR) → fatura
-  const txLines = (text.match(/^\d{2}\/\d{2}\s+.+\s+[\d.]+,\d{2}(?:\s+CR)?$/gm) || []).length;
-  if (txLines >= 3) return "fatura";
+  const t = norm(text);
 
-  // Indicadores de relatório de investimentos / posição de carteira
-  const RELATORIO_RE = [
-    /PATRIMÔNIO\s+(?:TOTAL|L[IÍ]QUIDO|BRUTO)|SALDO\s+TOTAL/i,
-    /POSIÇÃO\s+(?:DETALHADA|CONSOLIDADA|FINANCEIRA)/i,
-    /CARTEIRA\s+(?:CONSOLIDADA|DE\s+INVESTIMENTOS)/i,
-    /RENTABILIDADE.*(?:M[EÊ]S|ANO)|RETORNO.*(?:M[EÊ]S|ANO)/i,
-    /ALOCA[ÇC][AÃ]O.*CARTEIRA|DISTRIBUI[ÇC][AÃ]O.*ATIVOS/i,
-    /(?:P[OÓ]S\s*FIXADO|PR[EÉ]\s*FIXADO|INFLA[ÇC][AÃ]O|MULTIMERCADO)\s+[\d,]+%/i,
-  ];
-  for (const re of RELATORIO_RE) {
-    if (re.test(text)) return "relatorio";
+  // Fatura / extrato bancário
+  if (
+    /FATURA.*CARTAO|CARTAO.*FATURA/i.test(t) ||
+    /LANCAMENTOS.*COMPRAS|COMPRAS.*LANCAMENTOS/i.test(t) ||
+    /ENCARGOS\s+POR\s+ATRASO|JUROS\s+ROTATIVOS/i.test(t) ||
+    /PAGAMENTO\s+(?:MINIMO|TOTAL)\s+DA\s+FATURA/i.test(t) ||
+    /FATURA\s+DO\s+MES/i.test(t)
+  ) {
+    if (/\d{2}\/\d{2}\s+.+\s+[\d.]+,\d{2}/.test(text)) return "fatura";
   }
+  if ((text.match(/^\d{2}\/\d{2}\s+.+\s+[\d.]+,\d{2}/gm) || []).length >= 3) return "fatura";
+
+  // Relatório de investimentos — palavras sem acento
+  if (
+    /PATRIMONIO\s+TOTAL|PATRIM.{0,3}NIO\s+TOTAL/i.test(t) ||
+    /EVOLUCAO\s+PATRIMONIAL|EVOLU.{0,3}O\s+PATRIMONIAL/i.test(t) ||
+    /POSICAO\s+DETALHADA|POSI.{0,3}O\s+DETALHADA/i.test(t) ||
+    /CARTEIRA\s+CONSOLIDADA/i.test(t) ||
+    /COMPOSICAO|COMPOSI.{0,3}O/i.test(t) && /RENTABILIDADE/i.test(t) ||
+    /POS\s+FIXADO|P.S\s+FIXADO/i.test(t) && /RENTABILIDADE/i.test(t)
+  ) return "relatorio";
 
   return "generico";
 }
 
-// ── Mapeamento de categorias de gastos ────────────────────────
-// Funciona para qualquer banco: classifica pelo nome do estabelecimento
-// e por rótulos de categoria que alguns bancos incluem perto das transações
+// ── Classes de investimento — padrões resistentes a encoding ───
 
-const CAT_RULES = [
-  {
-    key: "alimentacao",
-    re: /ALIMENTA[ÇC][AÃ]O|SUPERMERC|SUPERMERCADO|PADARIA|RESTAURANTE|LANCHONETE|A[CÇ]OUGUE|HORTIFRUTI|MERCEARIA|PEIXARIA|QUITANDA|IFOOD|RAPPI|UBER\s*EATS|DELIVERY|CONVENI[EÊ]NCIA/i,
-  },
-  {
-    key: "carro",
-    re: /VE[IÍ]CULOS|COMBUST[IÍ]VEL|GASOLINA|ETANOL|ALCOOL\s+AUTOM|AUTO\s*PE[ÇC]|ESTACION|PED[AÁ]GIO|OFICINA|LUBRIFIC|AUTOPISTA|AUTOVIAÇÃO|SERV.*AUTO/i,
-  },
-  {
-    key: "saude",
-    re: /SA[ÚU]DE|FARM[AÁ]CIA|DROGARIA|HOSPITAL|CL[IÍ]NICA|LABORAT[OÓ]RIO|[OÓ]PTICA|HIGIENE|BELEZA|SERV.*SA[ÚU]DE|PLANO\s+SA[ÚU]DE|CONV[EÊ]NIO\s+M[EÉ]D|DENTISTA/i,
-  },
-  {
-    key: "educacao",
-    re: /EDUCA[ÇC][AÃ]O|ESCOLA|FACULDADE|UNIVERSIDADE|CURSO\b|IDIOMA|LIVROS|PAPELARIA|MATERIAL\s+ESCOLAR|COLEGIO|ENSINO/i,
-  },
-  {
-    key: "lazer",
-    re: /TURISMO|ENTRETENIM|CINEMA|TEATRO|SHOW\b|HOTEL\b|POUSADA|DIVERS[AÃ]O|DIVERS[OÕ]ES|LAZER|ESPORTE|RECREA[ÇC]|EVENTOS|HOSPEDAGEM|RESORT|AIRBNB/i,
-  },
-  {
-    key: "assinaturas",
-    re: /STREAMING|ASSINATURA|TELEFONIA|TELECOMUNIC|PLANO\s+(?:M[OÓ]VEL|CELULAR)|MENSALIDADE\s+APP/i,
-  },
-  {
-    key: "moradia",
-    re: /CONDOM[IÍ]NIO|ALUGUEL|SERV.*P[UÚ]BLICOS|CONCESSION|ENERGIA\s+EL[EÉ]TRICA|SANEAMENTO|[AÁ]GUA\b|G[AÁ]S\b|IPTU/i,
-  },
-  {
-    key: "cartoes",
-    re: /VEST[UÚ][AÁ]RIO|CAL[ÇC]ADOS|MODA\b|ROUPAS|ACESS[OÓ]RIOS|JOALHERIA|ELETR[OÔ]NICO|INFORM[AÁ]TICA|LOJAS\s+/i,
-  },
-  {
-    key: "seguros",
-    re: /SEGUROS|SEGURADORA|PR[EÊ]MIO\s+SEGURO|SEGURO\s+(?:VIDA|AUTO|RESID)/i,
-  },
-  {
-    key: "outros",
-    re: /OUTROS|DIVERSOS|SERV.*DIVERS|UTILIT[AÁ]RIOS|MISCEL[AÂ]NEA/i,
-  },
+// Cada entrada tem: key do sistema, padrões para detectar no texto normalizado
+const CLASS_DEFS = [
+  { key: "posFixado",  pats: [/POS\s*FIXADO|P.S\s+FIXADO|RENDA\s+FIXA\s+POS/i] },
+  { key: "preFixado",  pats: [/PRE\s*FIXADO|PR.\s+FIXADO|RENDA\s+FIXA\s+PRE/i] },
+  { key: "ipca",       pats: [/INFLACAO|INFLA.{0,3}O\b|IPCA\s*\+|NTN.?B/i] },
+  { key: "acoes",      pats: [/RENDA\s+VARI.VEL(?:\s+BRASIL)?|ACOES\b|A.OES\b/i] },
+  { key: "multi",      pats: [/MULTIMERCADO/i] },
+  { key: "fiis",       pats: [/FUNDOS?\s+LISTADOS|FUNDO\s+IMOBILI.{0,3}RIO|FII\b|ALTERNATIVO/i] },
+  { key: "prevVGBL",   pats: [/VGBL/i] },
+  { key: "prevPGBL",   pats: [/PGBL/i] },
+  { key: "global",     pats: [/GLOBAL|INTERNACIONAL|EXTERIOR/i] },
 ];
 
-// Merchants conhecidos (cobertura mais ampla que qualquer lista de banco)
+function classNameToKey(name) {
+  const n = norm(name);
+  for (const { key, pats } of CLASS_DEFS) {
+    for (const pat of pats) {
+      if (pat.test(n)) return key;
+    }
+  }
+  return null;
+}
+
+// ── Parser de relatório de investimentos ───────────────────────
+
+function parseRelatorio(text) {
+  const result = {};
+  const nt = norm(text); // texto normalizado (sem acentos)
+
+  // ── KPIs do cabeçalho ──────────────────────────────────────
+  // Aceita tanto "PATRIMÔNIO" quanto "PATRIMONIO" quanto "PATRIM NIO" (garbled)
+  const patrimonioRE = [
+    /PATRIM.{0,4}NIO\s+TOTAL\s+BRUTO\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /PATRIM.{0,4}NIO\s+(?:TOTAL|LIQUIDO|BRUTO)\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /SALDO\s+TOTAL\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /VALOR\s+TOTAL\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+  ];
+  for (const re of patrimonioRE) {
+    const m = nt.match(re);
+    if (m) { result._patrimonioTotal = parseBRL(m[1]); break; }
+  }
+
+  const rentMesRE = [
+    /RENTABILIDADE\s+(?:DO\s+)?M.S\s*:?\s*([-\d,]+)%/i,
+    /RENT\.?\s*M.S\s*:?\s*([-\d,]+)%/i,
+  ];
+  for (const re of rentMesRE) {
+    const m = nt.match(re);
+    if (m) { result._rentMes = m[1].replace(",", "."); break; }
+  }
+
+  const ganhoRE = [
+    /GANHO\s+(?:DO\s+)?M.S\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /RESULTADO\s+(?:DO\s+)?M.S\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+  ];
+  for (const re of ganhoRE) {
+    const m = nt.match(re);
+    if (m) { result._ganhoMes = parseBRL(m[1]); break; }
+  }
+
+  // ── Extração de classes — processa linha a linha ────────────
+  // Pré-processa: une linhas que terminam com " -" (nomes longos que quebram)
+  const rawLines = text.split("\n");
+  const lines = [];
+  let carry = "";
+  for (const line of rawLines) {
+    const t = line.trim();
+    if (!t) {
+      if (carry) { lines.push(carry.trim()); carry = ""; }
+      continue;
+    }
+    // Se a linha termina com espaço+hífen (nome quebrado), une com a próxima
+    if (/\s-$/.test(t) && !/ R\$/.test(t)) {
+      carry += t + " ";
+    } else {
+      lines.push((carry + t).trim());
+      carry = "";
+    }
+  }
+  if (carry) lines.push(carry.trim());
+
+  // SKIP: linhas que claramente são cabeçalhos ou rodapés
+  const SKIP_RE = /^(?:POSI.{0,4}O\s+DETALHADA|PRECIFICA|Estrat.{0,3}gia|M.S\s+ATUAL|Refer.{0,4}ncia|ANO\b|24\s*MESES|Relat.{0,4}rio|Data\s+de|Aviso|\*|Gerado|Este\s+material)/i;
+
+  let currentClassKey = null;
+
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || SKIP_RE.test(t)) continue;
+    const nt_line = norm(t);
+
+    // ── Detectar linha de composição: "ClassName (XX,XX%) R$ VALUE" ─
+    // Funciona no texto normalizado (sem acentos)
+    const compM = nt_line.match(
+      /^([A-Z][A-Z\s\/\-\.]{2,40}?)\s+\(?(\d[\d,]+)%\)?\s+R\$\s*([\d.]+,\d{2})/
+    );
+    if (compM) {
+      const key = classNameToKey(compM[1]);
+      if (key) {
+        const val = parseBRL(compM[3]);
+        if (val >= 100 && !result[key]) result[key] = String(val);
+        continue;
+      }
+    }
+
+    // ── Detectar linha de classe na Posição Detalhada: "ClassName R$ VALUE -" ─
+    const classHdrM = nt_line.match(
+      /^([A-Z][A-Z\s\/\-\.]{2,40}?)\s+R\$\s*([\d.]+,\d{2})\s+-\s/
+    );
+    if (classHdrM) {
+      const key = classNameToKey(classHdrM[1]);
+      if (key) {
+        currentClassKey = key;
+        const val = parseBRL(classHdrM[2]);
+        if (val >= 100 && !result[key]) result[key] = String(val);
+        continue;
+      }
+    }
+
+    // ── Detectar ativo individual: "Nome R$ VALUE QTD %ALOC% RENT%" ─
+    // QTD é um número (inteiro ou decimal) — diferencia de classe (que tem "-")
+    if (!currentClassKey) continue;
+
+    const assetM = t.match(
+      /^(.+?)\s+R\$\s*([\d.]+,\d{2})\s+([\d.,]+)\s+([\d,]+)%\s+([-\d,]+)%/
+    );
+    if (assetM) {
+      const nome = assetM[1].trim();
+      const valor = parseBRL(assetM[2]);
+      const rentMes = assetM[5];
+
+      if (valor <= 0 || nome.length < 2) continue;
+      if (/^(?:CAIXA|PROVENTOS|TOTAL)/i.test(nome)) continue;
+
+      const ativosKey = currentClassKey + "Ativos";
+      if (!result[ativosKey]) result[ativosKey] = [];
+
+      // Evita duplicatas
+      if (!result[ativosKey].find(a => a.nome === nome)) {
+        result[ativosKey].push({
+          id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+          nome,
+          valor: String(valor),
+          rentMes,
+          rentAno: "",
+          objetivo: "",
+          segmento: "",
+        });
+      }
+    }
+  }
+
+  // ── Fallback: se ainda não encontrou classes, busca por padrão livre ─
+  for (const { key, pats } of CLASS_DEFS) {
+    if (result[key]) continue;
+    for (const pat of pats) {
+      const idx = nt.search(pat);
+      if (idx < 0) continue;
+      // Busca a primeira ocorrência de "R$ VALUE" nos próximos 400 chars
+      const chunk = nt.slice(idx, Math.min(nt.length, idx + 400));
+      const valM = chunk.match(/R\$\s*([\d.]+,\d{2})/);
+      if (valM) {
+        const val = parseBRL(valM[1]);
+        if (val >= 10000 && val <= 10_000_000_000) {
+          result[key] = String(val);
+          break;
+        }
+      }
+    }
+  }
+
+  if (result._rentMes) result.rentabilidade = result._rentMes;
+
+  // ── Movimentações ──────────────────────────────────────────
+  const movIdx = nt.search(/MOVIMENTA.{0,4}ES|OPERA.{0,4}ES\s+(?:DA|DO)/i);
+  if (movIdx >= 0) {
+    const movChunk = nt.slice(movIdx, Math.min(nt.length, movIdx + 8000));
+    let rendimentos = 0;
+    const rendRe = /(?:RENDIMENTO|DIVIDENDO|JCP|JSCP|JUROS|AMORTIZA.{0,4}O|INTEGRALIZA.{0,4}O\s+DE\s+COTAS)[^\n]*R\$\s*([\d.]+,\d{2})/gi;
+    let rm;
+    while ((rm = rendRe.exec(movChunk)) !== null) rendimentos += parseBRL(rm[1]);
+    if (rendimentos > 0) result._rendimentosPassivos = rendimentos;
+
+    let aportes = 0;
+    const aRe = /(?:TRANSFER.{0,4}NCIA\s+RECEBIDA|TED.*APLICA|APORTE|APLICA.{0,4}O)[^\n]*R\$\s*([\d.]+,\d{2})/gi;
+    let am;
+    while ((am = aRe.exec(movChunk)) !== null) aportes += parseBRL(am[1]);
+    if (aportes > 0) result._aportes = aportes;
+
+    let resgates = 0;
+    const rRe = /(?:TRANSFER.{0,4}NCIA\s+ENVIADA|RESGATE|RETIRADA)[^\n]*R\$\s*([\d.]+,\d{2})/gi;
+    let resm;
+    while ((resm = rRe.exec(movChunk)) !== null) resgates += parseBRL(resm[1]);
+    if (resgates > 0) result._resgates = resgates;
+  }
+
+  result._tipo = "relatorio";
+  console.log("[WealthTrack] parseRelatorio resultado:", result);
+  return result;
+}
+
+// ── Mapeamento de categorias de gastos (fatura) ───────────────
+
+const CAT_RULES = [
+  { key: "alimentacao", re: /ALIMENTA.{0,4}O|SUPERMERC|PADARIA|RESTAURANTE|LANCHONETE|A.OUGUE|HORTIFRUTI|MERCEARIA/i },
+  { key: "carro",       re: /VE.CULOS|COMBUST.VEL|GASOLINA|ETANOL|AUTO\s*PE.A|ESTACION|PED.GIO|OFICINA/i },
+  { key: "saude",       re: /SA.DE|FARM.CIA|DROGARIA|HOSPITAL|CL.NICA|LABORAT|.PTICA|HIGIENE|DENTISTA/i },
+  { key: "educacao",    re: /EDUCA.{0,4}O|ESCOLA|FACULDADE|UNIVERSIDADE|CURSO\b|IDIOMA|LIVROS|PAPELARIA/i },
+  { key: "lazer",       re: /TURISMO|ENTRETENIM|CINEMA|TEATRO|SHOW\b|HOTEL\b|POUSADA|DIVERS.O|LAZER|ESPORTE|AIRBNB/i },
+  { key: "assinaturas", re: /STREAMING|ASSINATURA|TELEFONIA|TELECOMUNIC/i },
+  { key: "moradia",     re: /CONDOM.NIO|ALUGUEL|SERV.*P.BLICOS|ENERGIA\s+EL.TRICA|SANEAMENTO|.GUA\b|G.S\b|IPTU/i },
+  { key: "cartoes",     re: /VEST.{0,4}RIO|CAL.ADOS|MODA\b|ROUPAS|JOALHERIA|ELETR.NICO/i },
+  { key: "seguros",     re: /SEGUROS|SEGURADORA/i },
+  { key: "outros",      re: /OUTROS|DIVERSOS/i },
+];
+
 const MERCHANT_RULES = [
-  // Alimentação
-  { re: /ZAFFARI|WALMART|CARREFOUR|ASSAI|ATACAD|EXTRA\b|BIG\b|MERCADONA|HORTIFRUTI|PÃO\s+DE\s+AÇÚCAR|TENDA|SHIBATA|MUNDO\s+VERDE|NATURAL|FORMULA/i, key: "alimentacao" },
-  { re: /MCDONALDS|BURGER\s*KING|SUBWAY|HABIB|GIRAFFAS|BOB.?S|DOMINOS|PIZZA|BOBS\b|KFC\b|POPEYES|OUTBACK|MADERO/i, key: "alimentacao" },
-  { re: /IFOOD|RAPPI|UBER\s*EATS|JAMES\s*DELIVERY/i, key: "alimentacao" },
-  // Carro / Transporte
-  { re: /PETROBRAS|IPIRANGA|SHELL|BP\b|RAIZEN|GRAAL|DISTRIBUIDORA\s+COMB/i, key: "carro" },
-  { re: /\bUBER\b|99\s*(?:T[AÁ]XI|DRIVER|POP)|CABIFY|INDRIVER/i, key: "carro" },
-  { re: /ESTAPAR|PARK\b|ROTATÓRIO|MULTIPARK/i, key: "carro" },
-  // Saúde
-  { re: /DROGASIL|DROGA\s*RAIA|NISSEI|ULTRAFARMA|PAGUE\s*MENOS|PANVEL|PACHECO|FARMÁCIA\s+SÃO|EXTRAFARMA/i, key: "saude" },
-  { re: /UNIMED|AMIL|SULAMERICA|HAPVIDA|NOTREDAME|PREVENT\s*SENIOR/i, key: "saude" },
-  // Assinaturas
-  { re: /NETFLIX|SPOTIFY|AMAZON\s*PRIME|DISNEY|GLOBOPLAY|YOUTUBE\s*PREM|APPLE\s*COM|DEEZER|PARAMOUNT|MAX\b|HULU/i, key: "assinaturas" },
-  { re: /TIM\b|CLARO\b|VIVO\b|OI\b|ALGAR\b|NEXTEL/i, key: "assinaturas" },
-  { re: /MICROSOFT|ADOBE|DROPBOX|ICLOUD|OFFICE\s*365|GOOGLE\s*ONE/i, key: "assinaturas" },
-  // Lazer
-  { re: /CINESYSTEM|CINEMARK|UCI\s+CINEMA|KINOPLEX|CINEPOLIS/i, key: "lazer" },
-  { re: /STEAM\b|PLAYSTATION|XBOX\b|NINTENDO/i, key: "lazer" },
-  // Moradia
-  { re: /SABESP|COPASA|SANEPAR|EMBASA|COSANPA|CASAN/i, key: "moradia" },
-  { re: /CEMIG|CPFL|ENEL\b|LIGHT\b|COELBA|CELPE|ENERGISA|ELETROPAULO/i, key: "moradia" },
-  { re: /COMGAS|GAS\s*NATURAL|NATURGY/i, key: "moradia" },
+  { key: "alimentacao", re: /ZAFFARI|WALMART|CARREFOUR|ASSAI|ATACAD|EXTRA\b|BIG\b|HORTIFRUTI|SHIBATA/i },
+  { key: "alimentacao", re: /MCDONALDS|BURGER|SUBWAY|HABIB|GIRAFFAS|DOMINOS|PIZZA|KFC\b|OUTBACK|MADERO/i },
+  { key: "alimentacao", re: /IFOOD|RAPPI|UBER\s*EATS/i },
+  { key: "carro",       re: /PETROBRAS|IPIRANGA|SHELL|BP\b|RAIZEN|GRAAL/i },
+  { key: "carro",       re: /\bUBER\b|99\s*(?:TAXI|DRIVER|POP)|CABIFY/i },
+  { key: "saude",       re: /DROGASIL|DROGA\s*RAIA|NISSEI|ULTRAFARMA|PAGUE\s*MENOS|PANVEL|PACHECO/i },
+  { key: "saude",       re: /UNIMED|AMIL|SULAMERICA|HAPVIDA|NOTREDAME|PREVENT\s*SENIOR/i },
+  { key: "assinaturas", re: /NETFLIX|SPOTIFY|AMAZON\s*PRIME|DISNEY|GLOBOPLAY|YOUTUBE\s*PREM|DEEZER|MAX\b/i },
+  { key: "assinaturas", re: /\bTIM\b|\bCLARO\b|\bVIVO\b|\bOI\b/i },
+  { key: "assinaturas", re: /MICROSOFT|ADOBE|DROPBOX|ICLOUD|OFFICE\s*365|GOOGLE\s*ONE/i },
+  { key: "lazer",       re: /CINESYSTEM|CINEMARK|UCI\s+CINEMA|KINOPLEX/i },
+  { key: "moradia",     re: /SABESP|COPASA|SANEPAR|EMBASA|CASAN/i },
+  { key: "moradia",     re: /CEMIG|CPFL|\bENEL\b|\bLIGHT\b|COELBA|ENERGISA/i },
+  { key: "moradia",     re: /COMGAS|GAS\s*NATURAL|NATURGY/i },
 ];
 
 function mapCategory(nearbyText, merchantName) {
-  // 1. Tenta pelo texto próximo (rótulo de categoria que o banco pode incluir)
+  const context = norm(nearbyText || "");
+  const merchant = norm(merchantName || "");
   for (const { key, re } of CAT_RULES) {
-    if (re.test(nearbyText || "")) return key;
+    if (re.test(context)) return key;
   }
-  // 2. Tenta por merchant específico
   for (const { key, re } of MERCHANT_RULES) {
-    if (re.test(merchantName || "")) return key;
+    if (re.test(merchant)) return key;
   }
-  // 3. Tenta pelas regras gerais no nome do merchant
   for (const { key, re } of CAT_RULES) {
-    if (re.test(merchantName || "")) return key;
+    if (re.test(merchant)) return key;
   }
   return "outros";
 }
 
-// ── Parser genérico de extrato / fatura ───────────────────────
-// Funciona para qualquer banco: detecta padrão DD/MM ESTABELECIMENTO VALOR
+// ── Parser genérico de fatura / extrato ───────────────────────
 
 function parseFatura(text) {
   const lines = text.split("\n");
   const result = {};
 
-  // Padrão universal: DD/MM ou DD/MM/AAAA + nome + valor BRL (com ou sem "CR")
   const TRANS_RE = /^(\d{2}\/\d{2}(?:\/\d{2,4})?)\s+(.+?)\s+([\d.]+,\d{2})(?:\s+CR)?$/;
-
-  // Linhas a ignorar (totais, cabeçalhos, rodapés)
-  const SKIP_RE = /^(?:TOTAL|SUBTOTAL|VENCIMENTO|DATA\b|VALOR\b|SALDO|LIMITE|FATURA\b|PAGAMENTO\b|CÂMBIO|IOF|ENCARGOS|JUROS\b|MULTA|TARIFA|ANUIDADE|\*{3}|\-{3}|={3})/i;
+  const SKIP_RE = /^(?:TOTAL|SUBTOTAL|VENCIMENTO|DATA\b|VALOR\b|SALDO|LIMITE|FATURA\b|PAGAMENTO\b|CAMBIO|IOF|ENCARGOS|JUROS\b|MULTA|TARIFA|ANUIDADE|\*{3}|\-{3}|={3})/i;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -273,14 +433,12 @@ function parseFatura(text) {
     const m = TRANS_RE.exec(line);
     if (!m) continue;
 
-    const data  = m[1].slice(0, 5); // DD/MM
+    const data  = m[1].slice(0, 5);
     const nome  = m[2].trim();
     const valor = parseBRL(m[3]);
 
-    // Filtra valores absurdos (acima de R$200k por transação)
     if (valor <= 0 || valor > 20000000) continue;
 
-    // Coleta até 2 linhas seguintes como contexto para detectar categoria
     let contexto = "";
     for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
       const nl = lines[j].trim();
@@ -305,148 +463,21 @@ function parseFatura(text) {
   return output;
 }
 
-// ── Parser genérico de relatório de investimentos ──────────────
-// Funciona para qualquer corretora/banco: detecta classes e totais
-
-function parseRelatorio(text) {
-  const result = {};
-
-  // ── Total do patrimônio ─────────────────────────────────────
-  // Busca padrões comuns a qualquer relatório
-  const PATRIMONIO_RE = [
-    /PATRIMÔNIO\s+(?:TOTAL|L[IÍ]QUIDO|BRUTO)[\s:]*R?\$?\s*([\d.]+,\d{2})/i,
-    /SALDO\s+TOTAL[\s:]*R?\$?\s*([\d.]+,\d{2})/i,
-    /TOTAL\s+DA\s+CARTEIRA[\s:]*R?\$?\s*([\d.]+,\d{2})/i,
-    /VALOR\s+TOTAL[\s:]*R?\$?\s*([\d.]+,\d{2})/i,
-  ];
-  for (const re of PATRIMONIO_RE) {
-    const m = text.match(re);
-    if (m) { result._patrimonioTotal = parseBRL(m[1]); break; }
-  }
-
-  // ── Rentabilidade do mês ────────────────────────────────────
-  const RENT_RE = [
-    /RENTABILIDADE\s+(?:DO\s+)?M[EÊ]S[\s:]*([-\d,]+)%/i,
-    /RETORNO\s+(?:DO\s+)?M[EÊ]S[\s:]*([-\d,]+)%/i,
-    /RENT\.?\s*M[EÊ]S[\s:]*([-\d,]+)%/i,
-    /RENDIMENTO\s+(?:DO\s+)?M[EÊ]S[\s:]*([-\d,]+)%/i,
-  ];
-  for (const re of RENT_RE) {
-    const m = text.match(re);
-    if (m) { result._rentMes = m[1].replace(",", "."); break; }
-  }
-
-  // ── Ganho do mês ───────────────────────────────────────────
-  const GANHO_RE = [
-    /GANHO\s+(?:DO\s+)?M[EÊ]S[\s:]*R?\$?\s*([\d.]+,\d{2})/i,
-    /RESULTADO\s+(?:DO\s+)?M[EÊ]S[\s:]*R?\$?\s*([\d.]+,\d{2})/i,
-    /RENDIMENTO\s+(?:DO\s+)?M[EÊ]S[\s:]*R?\$?\s*([\d.]+,\d{2})/i,
-  ];
-  for (const re of GANHO_RE) {
-    const m = text.match(re);
-    if (m) { result._ganhoMes = parseBRL(m[1]); break; }
-  }
-
-  // ── Alocações por classe ────────────────────────────────────
-  // Padrão: "NomeClasse XX,XX% R$X.XXX.XXX,XX" (tabela resumo)
-  const CLASS_SUMMARY_RE = /(P[OÓ]S[\s\-]*FIXADO|INFLA[ÇC][AÃ]O|PR[EÉ][\s\-]*FIXADO|RENDA\s+VARI[AÁ]VEL|A[ÇC][OÕ]ES|MULTIMERCADO|FUNDO\s+IMOB|FII\b|VGBL|PGBL|GLOBAL|INTERNACIONAL)\s+[\d,]+%\s+R?\$?\s*([\d.]+,\d{2})/gi;
-  let sm;
-  while ((sm = CLASS_SUMMARY_RE.exec(text)) !== null) {
-    const key = _classNameToKey(sm[1]);
-    if (key) {
-      const val = parseBRL(sm[2]);
-      if (val >= 10000) result[key] = String(val);
-    }
-  }
-
-  // Fallback: nome da classe → procura valor BRL próximo (até 300 chars)
-  const CLASS_FALLBACKS = [
-    { re: /P[OÓ]S[\s\-]*FIXADO/i,      key: "posFixado"  },
-    { re: /INFLA[ÇC][AÃ]O/i,            key: "ipca"       },
-    { re: /PR[EÉ][\s\-]*FIXADO/i,       key: "preFixado"  },
-    { re: /RENDA\s+VARI[AÁ]VEL|A[ÇC][OÕ]ES\b/i, key: "acoes" },
-    { re: /MULTIMERCADO/i,               key: "multi"      },
-    { re: /FUNDO\s+IMOB|FII\b/i,        key: "fiis"       },
-    { re: /VGBL/i,                       key: "prevVGBL"   },
-    { re: /PGBL/i,                       key: "prevPGBL"   },
-    { re: /GLOBAL|INTERNACIONAL|EXTERIOR|D[OÓ]LAR|USD\b/i, key: "global" },
-  ];
-  for (const { re, key } of CLASS_FALLBACKS) {
-    if (result[key]) continue;
-    const idx = text.search(re);
-    if (idx < 0) continue;
-    const chunk = text.slice(idx, Math.min(text.length, idx + 300));
-    const valM = chunk.match(/R?\$?\s*([\d.]+,\d{2})/);
-    if (valM) {
-      const val = parseBRL(valM[1]);
-      if (val >= 10000 && val <= 10000000000) result[key] = String(val);
-    }
-  }
-
-  // ── Rentabilidade → campo da carteira ──────────────────────
-  if (result._rentMes) result.rentabilidade = result._rentMes;
-
-  // ── Movimentações ──────────────────────────────────────────
-  const movIdx = text.search(/MOVIMENTA[ÇC][OÕ]ES|EXTRATO\s+DE\s+OPERA[ÇC][OÕ]ES/i);
-  if (movIdx >= 0) {
-    const movText = text.slice(movIdx, Math.min(text.length, movIdx + 6000));
-
-    // Renda passiva: dividendos, juros, amortizações
-    let rendimentos = 0;
-    const rendRe = /(?:RENDIMENTO|DIVIDENDO|JCP|JSCP|JUROS\s+(?:SOBRE|DE)\s+CAPITAL|PGT[Oo]?\s*JUROS|PGT[Oo]?\s*AMORTIZA|DISTRIBUI[ÇC][AÃ]O)[^\n]*([\d.]+,\d{2})/gi;
-    let rm;
-    while ((rm = rendRe.exec(movText)) !== null) rendimentos += parseBRL(rm[1]);
-    if (rendimentos > 0) result._rendimentosPassivos = rendimentos;
-
-    // Aportes
-    let aportes = 0;
-    const aRe = /(?:TRANSFER[EÊ]NCIA\s+RECEBIDA|APORTE|APLICA[ÇC][AÃ]O|DEP[OÓ]SITO)[^\n]*([\d.]+,\d{2})/gi;
-    let am;
-    while ((am = aRe.exec(movText)) !== null) aportes += parseBRL(am[1]);
-    if (aportes > 0) result._aportes = aportes;
-
-    // Resgates
-    let resgates = 0;
-    const rRe = /(?:TRANSFER[EÊ]NCIA\s+ENVIADA|RESGATE|RETIRADA|SAQUE)[^\n]*([\d.]+,\d{2})/gi;
-    let resm;
-    while ((resm = rRe.exec(movText)) !== null) resgates += parseBRL(resm[1]);
-    if (resgates > 0) result._resgates = resgates;
-  }
-
-  result._tipo = "relatorio";
-  return result;
-}
-
-function _classNameToKey(name) {
-  const n = name.toUpperCase();
-  if (/POS[\s\-]*FIXADO|PÓS/.test(n))          return "posFixado";
-  if (/INFLA|IPCA/.test(n))                     return "ipca";
-  if (/PR[EÉ][\s\-]*FIXADO/.test(n))            return "preFixado";
-  if (/RENDA\s+VARI|A[ÇC][OÕ]ES/.test(n))       return "acoes";
-  if (/MULTIMERCADO/.test(n))                    return "multi";
-  if (/FUNDO\s+IMOB|FII/.test(n))               return "fiis";
-  if (/VGBL/.test(n))                            return "prevVGBL";
-  if (/PGBL/.test(n))                            return "prevPGBL";
-  if (/GLOBAL|INTERNACIONAL|EXTERIOR/.test(n))  return "global";
-  return null;
-}
-
-// ── Parsers genéricos (fallback por palavras-chave) ────────────
+// ── Parsers genéricos por palavras-chave (fallback) ────────────
 
 const CART_PATTERNS = {
-  posFixado: [/CDB\b/i,/LCI\b/i,/LCA\b/i,/LFT\b/i,/TESOURO\s+SELIC/i,/P[OÓ]S.?FIXAD/i,/CDI\b/i,/COMPROMISSAD/i,/DEBENTURE/i],
-  ipca:      [/IPCA\s*\+/i,/NTN.?B/i,/TESOURO\s+IPCA/i,/INFLA[ÇC][AÃ]O\b/i],
-  preFixado: [/PR[EÉ].?FIXAD/i,/TESOURO\s+PREFIXADO/i,/NTN.?F/i,/LTN\b/i],
-  acoes:     [/A[ÇC][OÕ]ES?\b/i,/RENDA\s+VARI[AÁ]VEL/i,/BOLSA\b/i,/[A-Z]{4}[0-9]{1,2}\b/],
-  fiis:      [/FUNDO\s+IMOBILI[AÁ]RIO/i,/FII\b/i,/FI-?INFRA/i,/[A-Z]{4}11\b/],
+  posFixado: [/CDB\b/i,/LCI\b/i,/LCA\b/i,/LCD\b/i,/LFT\b/i,/TESOURO\s+SELIC/i,/POS.FIXAD/i,/CDI\b/i],
+  ipca:      [/IPCA\s*\+/i,/NTN.?B/i,/TESOURO\s+IPCA/i,/INFLACAO|INFLA.{0,3}O\b/i],
+  preFixado: [/PRE.FIXAD/i,/TESOURO\s+PREFIXADO/i,/NTN.?F/i,/LTN\b/i],
+  acoes:     [/ACOES|A.OES?\b/i,/RENDA\s+VARI.VEL/i,/BOLSA\b/i],
+  fiis:      [/FUNDO\s+IMOBILI/i,/FII\b/i,/[A-Z]{4}11\b/i],
   multi:     [/MULTIMERCADO/i,/HEDGE\s*FUND/i],
   prevVGBL:  [/VGBL/i],
   prevPGBL:  [/PGBL/i],
   globalEquities: [/EQUIT(?:IES|Y)\b/i,/BDR\b/i,/ADR\b/i],
   globalTreasury: [/TREASURY/i,/TESOURO\s+AMERICANO/i],
-  globalFunds:    [/MUTUAL\s+FUND/i],
-  globalBonds:    [/BONDS?\b/i,/RENDA\s+FIXA\s+GLOBAL/i],
-  global:         [/GLOBAL\b/i,/INTERNACIONAL\b/i,/EXTERIOR\b/i,/D[OÓ]LAR\b/i,/USD\b/i],
+  globalBonds:    [/BONDS?\b/i],
+  global:         [/GLOBAL\b/i,/INTERNACIONAL\b/i,/EXTERIOR\b/i,/DOLAR|D.LAR\b/i,/USD\b/i],
 };
 
 function _parseCarteiraGenerico(text) {
@@ -463,17 +494,17 @@ function _parseCarteiraGenerico(text) {
 }
 
 const FLUXO_PATTERNS = {
-  renda:       [/SAL[AÁ]RIO/i,/PROL[AÁ]BORE/i,/HONOR[AÁ]RIOS/i,/REMUNERA/i,/DIVIDENDOS/i,/RENDA\s+BRUTA/i,/RECEITA\b/i],
-  moradia:     [/ALUGUEL/i,/CONDOM[IÍ]NIO/i,/IPTU/i,/[AÁ]GUA\b/i,/ENERGIA\s+EL[EÉ]TRICA/i,/INTERNET\b/i],
-  alimentacao: [/SUPERMERCADO/i,/ATACAD[AÃ]O/i,/CARREFOUR/i,/RESTAURANTE/i,/IFOOD/i,/DELIVERY/i],
-  educacao:    [/ESCOLA\b/i,/FACULDADE/i,/MENSALIDADE.*ENSINO/i,/CURSO\b/i,/EDUCA[ÇC][AÃ]O/i],
+  renda:       [/SALARIO|SAL.RIO/i,/PROL.BORE/i,/HONOR.RIOS/i,/REMUNERA/i,/DIVIDENDOS/i,/RECEITA\b/i],
+  moradia:     [/ALUGUEL/i,/CONDOMINIO|CONDOM.NIO/i,/IPTU/i,/.GUA\b/i,/ENERGIA\s+EL.TRICA/i,/INTERNET\b/i],
+  alimentacao: [/SUPERMERCADO/i,/ATACAD.O/i,/CARREFOUR/i,/RESTAURANTE/i,/IFOOD/i],
+  educacao:    [/ESCOLA\b/i,/FACULDADE/i,/CURSO\b/i,/EDUCACAO|EDUCA.{0,4}O/i],
   lazer:       [/CINEMA/i,/VIAGEM\b/i,/HOTEL\b/i,/ENTRETENIMENTO/i,/NETFLIX/i,/SPOTIFY/i],
-  assinaturas: [/ASSINATURA\b/i,/STREAMING\b/i,/MICROSOFT\s*365/i,/ICLOUD/i],
-  cartoes:     [/FATURA\b/i,/CART[AÃ]O\s+DE\s+CR[EÉ]DITO/i],
-  carro:       [/COMBUST[IÍ]VEL/i,/GASOLINA/i,/POSTO\b/i,/IPVA/i,/PED[AÁ]GIO/i],
-  saude:       [/PLANO\s+DE\s+SA[ÚU]DE/i,/FARM[AÁ]CIA/i,/HOSPITAL/i,/EXAME\b/i],
+  assinaturas: [/ASSINATURA\b/i,/STREAMING\b/i,/MICROSOFT/i,/ICLOUD/i],
+  cartoes:     [/FATURA\b/i,/CARTAO.*CREDITO|CART.O.*CR.DITO/i],
+  carro:       [/COMBUSTIVEL|COMBUST.VEL/i,/GASOLINA/i,/POSTO\b/i,/IPVA/i,/PEDAGIO|PED.GIO/i],
+  saude:       [/PLANO\s+DE\s+SA.DE/i,/FARMACIA|FARM.CIA/i,/HOSPITAL/i,/EXAME\b/i],
   seguros:     [/SEGURO\s+DE\s+VIDA/i,/SEGURADORA/i],
-  outros:      [/OUTROS\b/i,/DIVERSE/i],
+  outros:      [/OUTROS\b/i,/DIVERSOS/i],
 };
 
 function _parseFluxoGenerico(text) {
@@ -493,11 +524,14 @@ function _parseFluxoGenerico(text) {
 
 export function parseCarteiraFromText(text) {
   const tipo = detectDocType(text);
+  console.log("[WealthTrack] detectDocType:", tipo);
   if (tipo === "relatorio") {
     const res = parseRelatorio(text);
-    // Se o relatório não trouxe nenhuma classe, complementa com o genérico
-    const classes = Object.keys(res).filter(k => !k.startsWith("_") && k !== "rentabilidade");
-    if (classes.length === 0) return _parseCarteiraGenerico(text);
+    const classes = Object.keys(res).filter(k => !k.startsWith("_") && k !== "rentabilidade" && !k.endsWith("Ativos"));
+    if (classes.length === 0) {
+      console.log("[WealthTrack] Sem classes no parseRelatorio, usando genérico");
+      return _parseCarteiraGenerico(text);
+    }
     return res;
   }
   return _parseCarteiraGenerico(text);
@@ -507,7 +541,6 @@ export function parseFluxoFromText(text) {
   const tipo = detectDocType(text);
   if (tipo === "fatura") {
     const res = parseFatura(text);
-    // Se não detectou nada pela fatura, usa o genérico
     const cats = Object.keys(res).filter(k => !k.endsWith("_items"));
     if (cats.length === 0) return _parseFluxoGenerico(text);
     return res;

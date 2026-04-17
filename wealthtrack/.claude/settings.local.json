@@ -25,7 +25,8 @@
       "Bash(node -e ' *)",
       "Bash(node --experimental-vm-modules --input-type=module)",
       "Bash(python -c ' *)",
-      "Bash(pip install *)"
+      "Bash(pip install *)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }
