@@ -229,18 +229,29 @@ function parseRelatorio(text) {
     if (m) { result._ganhoMes = parseBRL(m[1]); break; }
   }
 
+  // Rentabilidade anual — quando cabeçalho e valor estão na mesma linha
+  const rentAnoRE = [
+    /RENTABILIDADE\s+(?:DO\s+)?ANO\s*:?\s*([-\d,]+)%/i,
+    /RENT\.?\s*ANO\s*:?\s*([-\d,]+)%/i,
+  ];
+  for (const re of rentAnoRE) {
+    const m = nt.match(re);
+    if (m) { result._rentAno = m[1].replace(",", "."); break; }
+  }
+
   // ── Fallback KPIs — layout XP: cabeçalhos numa linha, valores na linha de baixo ─
-  // Ex.: "PATRIMÔNIO TOTAL BRUTO: RENTABILIDADE MÊS: GANHO MÊS: …\nR$ 684.412,90 1,06% R$ 6.238,08 …"
-  if (!result._patrimonioTotal) {
-    const kpiIdx = nt.search(/PATRIM.{0,6}NIO\s+TOTAL/i);
-    if (kpiIdx >= 0) {
-      const kpiChunk = nt.slice(kpiIdx, Math.min(nt.length, kpiIdx + 600));
-      const rVals = [...kpiChunk.matchAll(/R\$\s*([\d.]+,\d{2})/g)];
-      const pVals = [...kpiChunk.matchAll(/([-\d]+,\d{1,2})%(?![,\d])/g)];
-      if (rVals[0]) result._patrimonioTotal = parseBRL(rVals[0][1]);
-      if (!result._rentMes && pVals[0]) result._rentMes = pVals[0][1].replace(",", ".");
-      if (!result._ganhoMes && rVals[1]) result._ganhoMes = parseBRL(rVals[1][1]);
-    }
+  // Ex.: "PATRIMÔNIO TOTAL BRUTO: RENTABILIDADE MÊS: GANHO MÊS: RENTABILIDADE ANO: …\n
+  //       R$ 684.412,90 1,06% R$ 6.238,08 5,32% R$ 36.411,00 …"
+  // Sempre executado para capturar todos os KPIs possíveis
+  const kpiIdx = nt.search(/PATRIM.{0,6}NIO\s+TOTAL/i);
+  if (kpiIdx >= 0) {
+    const kpiChunk = nt.slice(kpiIdx, Math.min(nt.length, kpiIdx + 600));
+    const rVals = [...kpiChunk.matchAll(/R\$\s*([\d.]+,\d{2})/g)];
+    const pVals = [...kpiChunk.matchAll(/([-\d]+,\d{1,2})%(?![,\d])/g)];
+    if (!result._patrimonioTotal && rVals[0]) result._patrimonioTotal = parseBRL(rVals[0][1]);
+    if (!result._rentMes  && pVals[0]) result._rentMes  = pVals[0][1].replace(",", ".");
+    if (!result._rentAno  && pVals[1]) result._rentAno  = pVals[1][1].replace(",", ".");
+    if (!result._ganhoMes && rVals[1]) result._ganhoMes = parseBRL(rVals[1][1]);
   }
 
   // ── Extração de classes — processa linha a linha ────────────
@@ -314,32 +325,58 @@ function parseRelatorio(text) {
       }
     }
 
+    // ── Detectar nome de classe standalone (sem R$) ─────────────────
+    // pdfjs às vezes separa o nome da classe do seu valor em linhas diferentes.
+    // Ex.: linha "Inflação" sozinha → linha seguinte "R$ 50.000,00 - 12%"
+    // Sem isso, currentClassKey ficaria como posFixado e os ativos IPCA+ iriam errado.
+    if (!compM && !classHdrM && !/ R\$/.test(t) && t.length < 60) {
+      const standaloneKey = classNameToKey(nt_line);
+      if (standaloneKey) {
+        currentClassKey = standaloneKey;
+        continue;
+      }
+    }
+
     // ── Detectar ativo individual: "Nome R$ VALUE QTD %ALOC% RENT%" ─
     // QTD é um número (inteiro ou decimal) — diferencia de classe (que tem "-")
     if (!currentClassKey) continue;
 
+    // Formato XP: Nome R$ VALOR QTD %ALOC RENT_MES% CDI_MES% RENT_ANO% ...
     const assetM = t.match(
-      /^(.+?)\s+R\$\s*([\d.]+,\d{2})\s+([\d.,]+)\s+([\d,]+)%\s+([-\d,]+)%/
+      /^(.+?)\s+R\$\s*([\d.]+,\d{2})\s+([\d.,]+)\s+([\d,]+)%\s+([-\d,]+)%(?:\s+([-\d,]+)%(?:\s+([-\d,]+)%)?)?/
     );
     if (assetM) {
-      const nome = assetM[1].trim();
-      const valor = parseBRL(assetM[2]);
-      const rentMes = assetM[5];
+      const nomeRaw = assetM[1].trim();
+      const valor   = parseBRL(assetM[2]);
+      // grupo 5 = RENT_MES, grupo 6 = CDI_MES (opcional), grupo 7 = RENT_ANO (opcional)
+      const rentMes = assetM[5] || "";
+      const rentAno = assetM[7] ? assetM[7].replace(",", ".") : "";
 
-      if (valor <= 0 || nome.length < 2) continue;
-      if (/^(?:CAIXA|PROVENTOS|TOTAL)/i.test(nome)) continue;
+      if (valor <= 0 || nomeRaw.length < 2) continue;
+      if (/^(?:CAIXA|PROVENTOS|TOTAL)/i.test(nomeRaw)) continue;
+
+      // Extrai vencimento do nome antes de limpar (ex: "NOV/2027", "MAI/28")
+      const vencM = nomeRaw.match(/\b([A-Z]{3}\/\d{2,4})\b/i);
+      const vencimento = vencM ? vencM[1].toUpperCase() : "";
+
+      // Remove sufixo de taxa do nome: "- 101,00% CDI" ou "- 114,00% DO CDI"
+      const nome = nomeRaw
+        .replace(/\s*[-–]\s*\d[\d,.]*%[\w\s%]*$/, "")
+        .replace(/\s*[-–]\s*$/, "")
+        .trim();
 
       const ativosKey = currentClassKey + "Ativos";
       if (!result[ativosKey]) result[ativosKey] = [];
 
-      // Evita duplicatas
+      // Evita duplicatas (compara nome limpo)
       if (!result[ativosKey].find(a => a.nome === nome)) {
         result[ativosKey].push({
           id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
           nome,
           valor: String(valor),
           rentMes,
-          rentAno: "",
+          rentAno,
+          vencimento,
           objetivo: "",
           segmento: "",
         });
@@ -366,7 +403,9 @@ function parseRelatorio(text) {
     }
   }
 
-  if (result._rentMes) result.rentabilidade = result._rentMes;
+  // Rentabilidade anual é exibida no KPI principal da página Carteira
+  if (result._rentAno) result.rentabilidade = result._rentAno;
+  else if (result._rentMes) result.rentabilidade = result._rentMes;
 
   // ── Movimentações ──────────────────────────────────────────
   const movIdx = nt.search(/MOVIMENTA.{0,4}ES|OPERA.{0,4}ES\s+(?:DA|DO)/i);

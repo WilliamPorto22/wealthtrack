@@ -367,6 +367,12 @@ export default function Carteira(){
                   <span style={{fontSize:12,color:"#22c55e",fontWeight:500}}>{xpSummary._rentMes}%</span>
                 </div>
               )}
+              {xpSummary._rentAno&&(
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(34,197,94,0.08)",border:"0.5px solid rgba(34,197,94,0.2)",borderRadius:8,...noEdit}}>
+                  <span style={{fontSize:11,color:"#748CAB"}}>Rentabilidade no Ano</span>
+                  <span style={{fontSize:12,color:"#22c55e",fontWeight:500}}>{xpSummary._rentAno}%</span>
+                </div>
+              )}
               {xpSummary._ganhoMes>0&&(
                 <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(34,197,94,0.04)",border:"0.5px solid rgba(34,197,94,0.12)",borderRadius:8,...noEdit}}>
                   <span style={{fontSize:11,color:"#748CAB"}}>Ganho no Mês</span>
