@@ -207,7 +207,7 @@ export default function ObjetivoDetalhes() {
             padding: "12px 16px",
             background: "none",
             border: "none",
-            borderBottom: ativa === aba ? `2px solid ${T.primary}` : "none",
+            borderBottom: ativa === aba ? `2px solid ${T.gold}` : "none",
             color: ativa === aba ? T.textPrimary : T.textMuted,
             fontSize: 13,
             fontWeight: ativa === aba ? 500 : 400,
@@ -217,7 +217,7 @@ export default function ObjetivoDetalhes() {
           }}
         >
           {aba === "resumo" && "📊 Resumo"}
-          {aba === "simulador" && "🔧 Simulador"}
+          {aba === "simulador" && "💡 Estratégias"}
           {aba === "acompanhamento" && "📈 Acompanhamento"}
           {aba === "ativos" && "💼 Ativos"}
         </button>
@@ -472,243 +472,435 @@ export default function ObjetivoDetalhes() {
     setEditandoMes(null);
   }
 
-  const Simulador = () => {
+  const Planos = () => {
+    const calcAporteNec = () => {
+      if (!prazo || prazo <= 0 || !meta) return aporte * 2;
+      const j = Math.pow(1 + TAXA_ANUAL / 100, 1 / 12) - 1;
+      const inflMensal = Math.pow(1 + IPCA_ANUAL / 100, 1 / 12) - 1;
+      let aporteMin = 0, aporteMax = meta * 2;
+      for (let iter = 0; iter < 80; iter++) {
+        const aporteTeste = (aporteMin + aporteMax) / 2;
+        let vt = inicial;
+        let atingiu = false;
+        for (let mes = 1; mes <= prazo * 12; mes++) {
+          vt = vt * (1 + j) + aporteTeste;
+          if (vt / Math.pow(1 + inflMensal, mes) >= meta) { atingiu = true; break; }
+        }
+        if (!atingiu) aporteMin = aporteTeste;
+        else aporteMax = aporteTeste;
+      }
+      return Math.ceil((aporteMin + aporteMax) / 2);
+    };
+
+    const aporteNecessario = calcAporteNec();
+    const aumentoNecessario = Math.max(0, aporteNecessario - aporte);
+    const percentualAumento = aporte > 0 ? Math.round((aumentoNecessario / aporte) * 100) : 100;
+    const prazoEstendido = anosNec;
+    const anosExtras = prazoEstendido ? Math.max(0, Math.round((prazoEstendido - prazo) * 10) / 10) : null;
+
+    const CardPlano = ({ numero, codigo, titulo, subtitulo, cor, descricao, comparacao, destaque, itens }) => (
+      <div style={{
+        background: "rgba(255,255,255,0.025)",
+        border: `0.5px solid ${T.border}`,
+        borderLeft: `3px solid ${cor}`,
+        borderRadius: T.radiusMd,
+        padding: "22px 20px 20px 18px",
+        marginBottom: 16,
+      }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 16 }}>
+          <div style={{
+            width: 46, height: 46, borderRadius: 10,
+            background: `${cor}15`, border: `1px solid ${cor}35`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0
+          }}>
+            <span style={{ fontSize: 11, color: cor, fontWeight: 700, letterSpacing: "0.04em" }}>{codigo}</span>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: cor, letterSpacing: "0.14em", marginBottom: 3, fontWeight: 600, textTransform: "uppercase" }}>
+              Plano {numero}{subtitulo ? `  ·  ${subtitulo}` : ""}
+            </div>
+            <div style={{ fontSize: 15, color: T.textPrimary, fontWeight: 500, lineHeight: 1.3 }}>
+              {titulo}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.8, marginBottom: 14 }}>
+          {descricao}
+        </div>
+
+        {/* Comparação visual antes → depois */}
+        {comparacao && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 32px 1fr",
+            alignItems: "center",
+            gap: 8,
+            background: `${cor}08`,
+            border: `1px solid ${cor}22`,
+            borderRadius: T.radiusSm,
+            padding: "16px 14px",
+            marginBottom: 16,
+          }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 6, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                {comparacao.antes.label}
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: T.textSecondary, lineHeight: 1.1 }}>
+                {comparacao.antes.valor}
+              </div>
+              {comparacao.antes.sub && (
+                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{comparacao.antes.sub}</div>
+              )}
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <span style={{ fontSize: 20, color: cor, fontWeight: 200, opacity: 0.7 }}>→</span>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: cor, marginBottom: 6, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 600 }}>
+                {comparacao.depois.label}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: cor, lineHeight: 1.1 }}>
+                {comparacao.depois.valor}
+              </div>
+              {comparacao.depois.sub && (
+                <div style={{ fontSize: 10, color: cor, marginTop: 4, opacity: 0.8 }}>{comparacao.depois.sub}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {destaque && (
+          <div style={{
+            background: `${cor}12`,
+            border: `1px solid ${cor}35`,
+            borderRadius: T.radiusSm,
+            padding: "11px 16px",
+            marginBottom: 16,
+            fontSize: 14,
+            color: cor,
+            fontWeight: 700,
+            textAlign: "center",
+            letterSpacing: "0.01em"
+          }}>
+            {destaque}
+          </div>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {itens.map((item, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 12, color: T.textSecondary, lineHeight: 1.65 }}>
+              <span style={{ color: cor, flexShrink: 0, fontWeight: 700, fontSize: 14, lineHeight: 1.2, marginTop: 1 }}>›</span>
+              <span>{item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+
+    const planosEspecificos = () => {
+      switch (objetivo.tipo) {
+        case "aposentadoria":
+          return [
+            {
+              numero: "03",
+              codigo: "AA",
+              titulo: "Alocação Estratégica de Ativos",
+              subtitulo: "Eficiência de Retorno",
+              cor: "#F0A202",
+              descricao: "A composição da carteira de investimentos é o principal determinante do retorno real de longo prazo. Uma alocação estruturada e alinhada ao horizonte temporal pode incrementar a rentabilidade real em 2 a 4 pontos percentuais ao ano sem elevação proporcional do risco.",
+              itens: [
+                "Tesouro IPCA+: núcleo da carteira com rentabilidade real garantida pelo governo federal, protegendo o poder de compra ao longo de décadas",
+                "PGBL com tabela regressiva: dedução de até 12% da renda bruta anual no IR gera liquidez imediata reinvestível, potencializando o efeito dos juros compostos",
+                "Fundos Imobiliários de tijolo: renda mensal isenta de IR para pessoa física com histórico de rendimento real positivo consistente no longo prazo",
+                "Ações com crescimento histórico de dividendos: proteção estrutural contra inflação e crescimento real do patrimônio ao longo do horizonte de acumulação",
+                "LCI e LCA de alta qualidade: camada de liquidez isenta de IR para rebalanceamentos periódicos da carteira sem impacto tributário sobre o movimento"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "TR",
+              titulo: "Eficiência Tributária como Alavanca de Rentabilidade",
+              subtitulo: "Planejamento Fiscal",
+              cor: "#22c55e",
+              descricao: "Reduzir a alíquota efetiva de IR sobre os rendimentos equivale a um incremento direto na rentabilidade líquida sem necessidade de maior exposição ao risco. Um planejamento tributário bem estruturado pode representar 1 a 3 pontos percentuais adicionais de retorno líquido ao ano.",
+              itens: [
+                "VGBL com tabela regressiva: alíquota de IR sobre rendimentos reduzida de 35% para 10% após 10 anos de acumulação — menor tributação disponível no sistema tributário brasileiro",
+                "Investimentos isentos de IR: LCI, LCA, dividendos de ações, rendimentos de FIIs e CRI/CRA compõem a camada fiscalmente mais eficiente da carteira",
+                "Compensação de perdas em renda variável: estratégia fiscal anual para abater prejuízos de operações anteriores na base tributável de ganhos futuros",
+                "Análise anual do modelo de declaração: a comparação entre modelo completo e simplificado pode representar diferença relevante na restituição e no fluxo de caixa disponível",
+                "Estruturação dos resgates previdenciários: planejar os resgates na fase de distribuição para manter o menor enquadramento de alíquota possível ao longo dos anos"
+              ]
+            }
+          ];
+
+        case "carro": {
+          const prazoConsorcio = Math.min(prazo || 5, 5);
+          const parcelaConsorcio = (meta / (prazoConsorcio * 12)) * 1.015;
+          const taxaFinMensal = 0.0199;
+          const entrada = meta * 0.2;
+          const creditoFin = meta - entrada;
+          const parcelaFin = creditoFin * (taxaFinMensal * Math.pow(1 + taxaFinMensal, 60)) / (Math.pow(1 + taxaFinMensal, 60) - 1);
+          return [
+            {
+              numero: "03",
+              codigo: "CC",
+              titulo: "Consórcio Automotivo",
+              subtitulo: "Menor Custo Total",
+              cor: "#FF6B35",
+              descricao: "O consórcio automotivo é o instrumento de menor custo para aquisição de veículos a prazo. A ausência de juros elimina o efeito exponencial negativo do financiamento tradicional, especialmente relevante em prazos superiores a 24 meses.",
+              destaque: `Parcela estimada: ${brl(parcelaConsorcio)}/mês por ${prazoConsorcio * 12} meses`,
+              itens: [
+                `Crédito de ${brl(meta)} com taxa de administração de aproximadamente 1,5% sobre o valor total, sem incidência de juros sobre o capital`,
+                "Ausência de juros representa economia de 20% a 40% em relação ao custo total do financiamento bancário para o mesmo prazo contratado",
+                "Lance com recursos próprios viabiliza contemplação antecipada em qualquer mês do contrato, independentemente do resultado do sorteio mensal",
+                "Verifique o histórico de contemplações por sorteio do grupo — grupos mais antigos tendem a apresentar maior frequência de contemplação por maturidade",
+                "Confirme o registro da administradora no Banco Central e avalie o histórico operacional antes da adesão ao grupo consorcial"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "CF",
+              titulo: "Financiamento com Análise de CET",
+              subtitulo: "Aquisição Imediata",
+              cor: "#2274A5",
+              descricao: "O financiamento bancário oferece disponibilidade imediata do veículo, porém o Custo Efetivo Total (CET) pode representar entre 20% e 80% do valor do bem em encargos financeiros. Análise criteriosa é indispensável antes da assinatura do contrato.",
+              destaque: `Entrada: ${brl(entrada)} + parcela estimada: ${brl(parcelaFin)}/mês (60x)`,
+              itens: [
+                "Custo Efetivo Total (CET): compare sempre o CET anual entre bancos, financeiras e montadoras — a taxa nominal subestima o custo real do crédito contratado",
+                "Entrada recomendada pelo CFP: mínimo de 20% a 30% do valor do veículo, reduzindo o prazo e o custo total dos juros ao longo do contrato",
+                "Débito automático na mesma instituição do salário reduz a taxa de juros contratada em média 0,3% a 0,5% ao mês sobre o saldo devedor",
+                "Modalidade CDC: verifique a possibilidade de liquidação antecipada com abatimento proporcional de juros, direito garantido pelo Código de Defesa do Consumidor",
+                "Evite prazos superiores a 48 meses em veículos: a depreciação do bem supera com frequência o saldo devedor, criando desequilíbrio patrimonial desfavorável"
+              ]
+            }
+          ];
+        }
+
+        case "imovel": {
+          const prazoConsorcioIm = Math.min(Math.max(prazo || 15, 10), 20);
+          const parcelaConsorcioIm = (meta / (prazoConsorcioIm * 12)) * 1.02;
+          const taxaFinMensalIm = 0.0075;
+          const entradaIm = meta * 0.2;
+          const creditoIm = meta - entradaIm;
+          const parcelaFinIm = creditoIm * (taxaFinMensalIm * Math.pow(1 + taxaFinMensalIm, 360)) / (Math.pow(1 + taxaFinMensalIm, 360) - 1);
+          return [
+            {
+              numero: "03",
+              codigo: "CI",
+              titulo: "Consórcio Imobiliário",
+              subtitulo: "Menor Custo Total",
+              cor: "#8AC926",
+              descricao: "O consórcio imobiliário é o instrumento de menor Custo Efetivo Total (CET) para aquisição de imóveis a prazo. Sem incidência de juros e com apenas taxa de administração, a economia em relação ao financiamento bancário pode superar 40% do valor total do bem.",
+              destaque: `Parcela estimada: ${brl(parcelaConsorcioIm)}/mês por ${prazoConsorcioIm} anos`,
+              itens: [
+                `Crédito de ${brl(meta)} com taxa de administração de aproximadamente 2% sobre o crédito total, sem incidência de juros sobre o capital`,
+                "Economia em relação ao financiamento bancário: entre 30% e 50% do valor total do imóvel ao longo do prazo, dependendo da taxa vigente na contratação",
+                "FGTS pode ser utilizado como oferta de lance para contemplação antecipada, reduzindo significativamente o tempo de espera pelo crédito",
+                "Contemplação por lance livre: o cotista planeja estrategicamente o momento de obtenção do crédito, com maior controle que o sorteio convencional",
+                "Avalie o rating ABAC e o histórico de contemplações da administradora escolhida — solidez operacional é critério essencial na seleção"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "FI",
+              titulo: "Financiamento Imobiliário",
+              subtitulo: "Análise de Custo de Oportunidade",
+              cor: "#1982C4",
+              descricao: "O financiamento imobiliário permite a aquisição antecipada do bem, mas exige análise rigorosa do Custo Efetivo Total (CET) e da decisão de oportunidade: o custo real do financiamento comparado ao retorno do capital não desembolsado mantido investido.",
+              destaque: `Entrada estimada: ${brl(entradaIm)} + parcela: ${brl(parcelaFinIm)}/mês (360x)`,
+              itens: [
+                "Custo Efetivo Total (CET): compare sempre o CET entre Caixa, bancos privados e cooperativas de crédito — a taxa nominal subestima o custo real da operação",
+                "FGTS: utilizável como entrada e em amortizações anuais — cada amortização extraordinária reduz o saldo devedor e os juros totais do contrato de forma relevante",
+                "Tabela SAC versus Price: a tabela SAC resulta em menor custo total de juros e é recomendada quando há capacidade de pagamento inicial maior nos primeiros anos",
+                "Portabilidade de crédito: direito legal do mutuário de transferir o financiamento para instituição com taxa inferior após a contratação, sem penalidade",
+                "Análise de oportunidade: mantenha capital excedente em Tesouro IPCA+ enquanto financia — o spread pode ser positivo a depender das taxas vigentes no momento"
+              ]
+            }
+          ];
+        }
+
+        case "sucessaoPatrimonial":
+          return [
+            {
+              numero: "03",
+              codigo: "PP",
+              titulo: "Previdência Privada como Instrumento Sucessório",
+              subtitulo: "Planejamento Tributário e Sucessório",
+              cor: "#6A4C93",
+              descricao: "A previdência privada é o instrumento mais eficiente do mercado brasileiro para planejamento sucessório: não integra o inventário, transmite capital ao beneficiário com liquidez em até 30 dias e oferece benefício tributário expressivo nas fases de acumulação e distribuição.",
+              itens: [
+                "Não integra o inventário: capital transmitido ao beneficiário em até 30 dias, sem ITCMD em muitos estados, sem bloqueio judicial e sem custos advocatícios de abertura",
+                "PGBL: dedução de até 12% da renda bruta tributável anual no IR — instrumento de eficiência tributária com impacto imediato e reinvestível no fluxo de caixa",
+                "Tabela regressiva: alíquota de IR sobre os rendimentos reduzida de 35% para 10% após 10 anos de acumulação — menor tributação disponível no sistema tributário brasileiro",
+                "VGBL: tributação exclusiva sobre o rendimento (não sobre o total acumulado), indicado como complemento ao PGBL ou para contribuintes do modelo simplificado",
+                "Proteção patrimonial: decisões jurídicas recentes têm reconhecido a impenhorabilidade da previdência privada em processos de execução, preservando o patrimônio familiar"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "SV",
+              titulo: "Seguro de Vida com Capital Relevante",
+              subtitulo: "Proteção e Liquidez Imediata",
+              cor: "#1982C4",
+              descricao: "O seguro de vida com capital expressivo é o único instrumento financeiro que cria patrimônio imediato independente do acumulado. Para planejamento sucessório de alto patrimônio, funciona como mecanismo de liquidez instantânea, viabilizando o pagamento do ITCMD e dos custos do inventário sem necessidade de venda forçada de ativos.",
+              itens: [
+                "Indenização isenta de Imposto de Renda para beneficiários, conforme Art. 794 do Código Civil e regulamentação da SUSEP — benefício tributário relevante na transmissão",
+                "Transmissão extrajudicial e direta: capital pago ao beneficiário cadastrado sem necessidade de abertura de inventário, com liquidez imediata para a família",
+                "Capital segurado adequado ao planejamento: a prática CFP recomenda cobertura de 10 a 20 vezes a renda anual, suficiente para manter o padrão de vida por 5 a 10 anos sem redução patrimonial",
+                "Coberturas complementares de alto valor: invalidez permanente por acidente ou doença, diagnóstico de doenças graves (câncer, infarto, AVC) e diária de internação hospitalar",
+                "Liquidez estratégica no inventário: o capital pode financiar o pagamento do ITCMD (imposto estadual sobre herança), evitando venda forçada de imóveis ou participações societárias"
+              ]
+            }
+          ];
+
+        default:
+          return [];
+      }
+    };
+
+    const planos = planosEspecificos();
 
     return (
       <div>
-        <div style={{ fontSize: 13, color: T.textSecondary, marginBottom: 12, fontWeight: 500 }}>
-          🔧 SIMULE CENÁRIOS
-        </div>
-        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 20, lineHeight: 1.5 }}>
-          Digite o valor que deseja e clique em "Calcular" para ver o resultado! ⚡ Rápido, preciso e sem travamentos.
+        {/* Header */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 10, fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase" }}>
+            Estratégias Personalizadas
+          </div>
+          <div style={{ fontSize: 13, color: T.textSecondary, lineHeight: 1.8 }}>
+            Baseado nos dados do seu objetivo e nas diretrizes técnicas do planejamento financeiro certificado (CFP),
+            mapeamos os caminhos mais eficientes para alcançar sua meta com o menor custo e maior previsibilidade.
+          </div>
         </div>
 
-        {/* Simulação 1: Novo Aporte */}
+        {/* Status Mini Card */}
         <div style={{
-          background: "rgba(255,255,255,0.03)",
+          background: "rgba(255,255,255,0.02)",
           border: `0.5px solid ${T.border}`,
           borderRadius: T.radiusMd,
-          padding: "16px",
-          marginBottom: 20
+          padding: "16px 20px",
+          marginBottom: 28,
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 12,
+          textAlign: "center"
         }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: T.textPrimary }}>
-            💰 E se aumentasse o aporte mensal?
+          <div>
+            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 5, letterSpacing: "0.08em", textTransform: "uppercase" }}>Aporte Atual</div>
+            <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 600 }}>{brl(aporte)}</div>
+            <div style={{ fontSize: 10, color: T.textMuted }}>por mês</div>
           </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 16, textAlign: "center" }}>
-              Valor atual: <strong style={{ fontSize: 14, color: T.textPrimary }}>{brl(aporte)}</strong>/mês
-            </div>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="Digite aqui"
-              value={inputAporte}
-              onChange={(e) => setInputAporte(e.target.value.replace(/\D/g, ""))}
-              style={{
-                width: "100%",
-                padding: "16px 12px",
-                background: T.bg,
-                border: `2px solid ${T.border}`,
-                borderRadius: "10px",
-                color: "#22c55e",
-                fontSize: 24,
-                fontWeight: 600,
-                textAlign: "center"
-              }}
-            />
+          <div style={{ borderLeft: `0.5px solid ${T.border}`, borderRight: `0.5px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 5, letterSpacing: "0.08em", textTransform: "uppercase" }}>Meta</div>
+            <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 600 }}>{brl(meta)}</div>
+            <div style={{ fontSize: 10, color: T.textMuted }}>patrimônio</div>
           </div>
-
-          <button
-            onClick={calcularAporte}
-            style={{
-              width: "100%",
-              padding: "11px 16px",
-              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              marginBottom: 14,
-              transition: "all 0.2s",
-              boxShadow: "0 4px 12px rgba(102, 126, 234, 0.4)"
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.1)"}
-            onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
-          >
-            ✨ Calcular Resultado
-          </button>
-
-          {simAporte && (
-            <div style={{
-              background: "rgba(34,197,94,0.1)",
-              border: "2px solid rgba(34,197,94,0.5)",
-              borderRadius: "8px",
-              padding: "12px",
-              fontSize: 12,
-              color: "#22c55e",
-              lineHeight: 1.6,
-              fontWeight: 500
-            }}>
-              ✅ Com <strong>R$ {brl(simAporte.aporte * 100)}/mês</strong><br/>
-              Você chegaria em <strong>{simAporte.prazoNovo || "50+"} anos</strong><br/>
-              <span style={{ fontSize: 11, opacity: 0.8 }}>⏱️ {Math.round((simAporte.economia || 0) * 10) / 10} anos mais rápido</span>
-            </div>
-          )}
+          <div>
+            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 5, letterSpacing: "0.08em", textTransform: "uppercase" }}>Prazo</div>
+            <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 600 }}>{prazo}</div>
+            <div style={{ fontSize: 10, color: T.textMuted }}>anos</div>
+          </div>
         </div>
 
-        {/* Simulação 2: Nova Taxa */}
+        {/* Ajustar a Rota */}
         <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: `0.5px solid ${T.border}`,
-          borderRadius: T.radiusMd,
-          padding: "16px",
-          marginBottom: 20
+          fontSize: 10, color: T.textMuted, letterSpacing: "0.18em", textTransform: "uppercase",
+          marginBottom: 16, display: "flex", alignItems: "center", gap: 10
         }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: T.textPrimary }}>
-            📈 E se tivesse uma rentabilidade maior?
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 16, textAlign: "center" }}>
-              Rentabilidade atual: <strong style={{ fontSize: 14, color: T.textPrimary }}>{TAXA_ANUAL}% a.a.</strong>
-            </div>
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="Digite aqui"
-              value={inputTaxa}
-              onChange={(e) => setInputTaxa(e.target.value.replace(/[^\d.]/g, "").replace(/(\..*?)\./g, "$1"))}
-              style={{
-                width: "100%",
-                padding: "16px 12px",
-                background: T.bg,
-                border: `2px solid ${T.border}`,
-                borderRadius: "10px",
-                color: "#f59e0b",
-                fontSize: 24,
-                fontWeight: 600,
-                textAlign: "center"
-              }}
-            />
-          </div>
-
-          <button
-            onClick={calcularTaxa}
-            style={{
-              width: "100%",
-              padding: "11px 16px",
-              background: "linear-gradient(135deg, #f59e0b 0%, #f97316 100%)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              marginBottom: 14,
-              transition: "all 0.2s",
-              boxShadow: "0 4px 12px rgba(245, 158, 11, 0.4)"
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.1)"}
-            onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
-          >
-            ✨ Calcular Resultado
-          </button>
-
-          {simTaxa && (
-            <div style={{
-              background: "rgba(34,197,94,0.1)",
-              border: "2px solid rgba(34,197,94,0.5)",
-              borderRadius: "8px",
-              padding: "12px",
-              fontSize: 12,
-              color: "#22c55e",
-              lineHeight: 1.6,
-              fontWeight: 500
-            }}>
-              ✅ Com <strong>{simTaxa.taxaNova.toFixed(2)}% a.a.</strong> de rentabilidade<br/>
-              Você chegaria em <strong>{simTaxa.prazoNovo || "50+"} anos</strong><br/>
-              <span style={{ fontSize: 11, opacity: 0.8 }}>⏱️ {Math.round((simTaxa.economia || 0) * 10) / 10} anos mais rápido</span>
-            </div>
-          )}
+          <span style={{ whiteSpace: "nowrap" }}>Ajustar a Rota</span>
+          <div style={{ flex: 1, height: "0.5px", background: T.border }} />
         </div>
 
-        {/* Simulação 3: Novo Prazo */}
-        <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: `0.5px solid ${T.border}`,
-          borderRadius: T.radiusMd,
-          padding: "16px",
-          marginBottom: 20
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 16, color: T.textPrimary }}>
-            ⏰ E se estendesse o prazo?
-          </div>
+        <CardPlano
+          numero="01"
+          codigo="M+"
+          titulo="Ajuste do Aporte Mensal"
+          subtitulo="Rota Principal"
+          cor="#22c55e"
+          descricao={
+            status === "viavel"
+              ? "O plano está no caminho certo. A consistência no aporte atual é suficiente para atingir a meta dentro do prazo estabelecido. Um incremento adicional amplia a margem de segurança e antecipa a conquista."
+              : `A disciplina de aportes é o principal fator de sucesso no acúmulo patrimonial de longo prazo. Para atingir ${brl(meta)} em ${prazo} anos, o aporte mensal necessário é de ${brl(aporteNecessario)}.`
+          }
+          destaque={
+            status === "viavel"
+              ? `Aporte atual de ${brl(aporte)}/mês garante a meta no prazo estabelecido`
+              : `Aporte necessário: ${brl(aporteNecessario)}/mês  (+${brl(aumentoNecessario)}/mês  —  +${percentualAumento}%)`
+          }
+          itens={[
+            status !== "viavel"
+              ? `Ajuste mensal necessário: ${brl(aumentoNecessario)} adicionais por mês, representando ${percentualAumento}% acima do aporte atual`
+              : "Aporte atual dentro do planejamento — mantenha a consistência e realize revisões anuais para preservar o poder real de acumulação",
+            "Automatize os aportes via débito automático na data de recebimento do salário, eliminando o viés comportamental de postergação do investimento",
+            "Reajuste o aporte pelo IPCA anualmente para preservar o poder real de acumulação e não perder terreno para a inflação ao longo do prazo",
+            "Redirecione receitas extraordinárias integralmente ao objetivo: 13º salário, bônus, PLR e restituição de IR têm impacto desproporcional no longo prazo",
+            "Controle o lifestyle inflation: a cada incremento de renda, comprometa ao menos 50% do aumento com o aporte — comportamento validado pelo CFP como fator crítico de sucesso"
+          ]}
+        />
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 16, textAlign: "center" }}>
-              Prazo atual: <strong style={{ fontSize: 14, color: T.textPrimary }}>{prazo || 10} anos</strong>
-            </div>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="Digite aqui"
-              value={inputPrazo}
-              onChange={(e) => setInputPrazo(e.target.value.replace(/\D/g, ""))}
-              style={{
-                width: "100%",
-                padding: "16px 12px",
-                background: T.bg,
-                border: `2px solid ${T.border}`,
-                borderRadius: "10px",
-                color: "#10b981",
-                fontSize: 24,
-                fontWeight: 600,
-                textAlign: "center"
-              }}
-            />
-          </div>
+        <CardPlano
+          numero="02"
+          codigo="T+"
+          titulo="Extensão Estratégica do Prazo"
+          subtitulo="Rota Alternativa"
+          cor="#3b82f6"
+          descricao={
+            prazoEstendido && prazoEstendido <= prazo
+              ? `O plano está adiantado. Mantendo o aporte atual de ${brl(aporte)}/mês, a meta de ${brl(meta)} será atingida em ${prazoEstendido} anos — ${Math.round((prazo - prazoEstendido) * 10) / 10} anos antes do prazo original estabelecido.`
+              : prazoEstendido
+              ? `Um horizonte de investimento maior potencializa o efeito dos juros compostos de forma não linear. Mantendo o aporte atual de ${brl(aporte)}/mês, a meta será atingida em ${prazoEstendido} anos.`
+              : `Com o aporte atual, o objetivo levaria mais de 50 anos para ser atingido. A extensão de prazo isolada não resolve — o ajuste de aporte é indispensável para viabilizar o plano.`
+          }
+          destaque={
+            prazoEstendido && prazoEstendido <= prazo
+              ? `Meta atingida em ${prazoEstendido} anos — ${Math.round((prazo - prazoEstendido) * 10) / 10} anos antes do prazo previsto`
+              : prazoEstendido
+              ? `Prazo real com aporte atual: ${prazoEstendido} anos  (+${anosExtras} anos além do planejado)`
+              : "Prazo projetado: superior a 50 anos com o aporte atual"
+          }
+          itens={[
+            prazoEstendido
+              ? `Projeção consolidada: ${brl(meta)} atingidos em ${prazoEstendido} anos mantendo ${brl(aporte)}/mês sem alteração nos aportes`
+              : "Aporte atual insuficiente para qualquer horizonte razoável — o ajuste de contribuição mensal é a ação prioritária",
+            "Prazo mais longo permite alocação maior em renda variável, historicamente superior à renda fixa em horizontes acima de 5 anos com menor custo real de risco",
+            "Combine extensão de prazo com aumentos graduais de aporte — a convergência das duas alavancas é mais eficiente do que cada uma aplicada isoladamente",
+            "Defina marcos intermediários de patrimônio para monitoramento e manutenção do comprometimento ao longo do horizonte de planejamento",
+            "O custo de adiar o início dos aportes é assimétrico: cada ano de postergação exige esforço de recuperação desproporcional nos anos subsequentes"
+          ]}
+        />
 
-          <button
-            onClick={calcularPrazo}
-            style={{
-              width: "100%",
-              padding: "11px 16px",
-              background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-              marginBottom: 14,
-              transition: "all 0.2s",
-              boxShadow: "0 4px 12px rgba(16, 185, 129, 0.4)"
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.filter = "brightness(1.1)"}
-            onMouseLeave={(e) => e.currentTarget.style.filter = "brightness(1)"}
-          >
-            ✨ Calcular Resultado
-          </button>
-
-          {simPrazo && (
+        {/* Alternativas estratégicas por tipo */}
+        {planos.length > 0 && (
+          <>
             <div style={{
-              background: "rgba(34,197,94,0.1)",
-              border: "2px solid rgba(34,197,94,0.5)",
-              borderRadius: "8px",
-              padding: "12px",
-              fontSize: 12,
-              color: "#22c55e",
-              lineHeight: 1.6,
-              fontWeight: 500
+              fontSize: 10, color: T.textMuted, letterSpacing: "0.18em", textTransform: "uppercase",
+              marginBottom: 16, marginTop: 28, display: "flex", alignItems: "center", gap: 10
             }}>
-              ✅ Com <strong>{Math.round(inputPrazo || 0)} anos</strong> de prazo<br/>
-              Você precisaria de <strong>R$ {brl((simPrazo.aporteNecessario || 0) * 100)}/mês</strong><br/>
-              <span style={{ fontSize: 11, opacity: 0.8 }}>📉 Redução: {Math.round(simPrazo.reducao || 0)}% do aporte atual</span>
+              <span style={{ whiteSpace: "nowrap" }}>Alternativas Estratégicas</span>
+              <div style={{ flex: 1, height: "0.5px", background: T.border }} />
             </div>
-          )}
+
+            {planos.map(p => (
+              <CardPlano key={p.numero} {...p} />
+            ))}
+          </>
+        )}
+
+        {/* Nota CFP */}
+        <div style={{
+          marginTop: 24,
+          padding: "16px 20px",
+          background: "rgba(240,162,2,0.04)",
+          border: `0.5px solid rgba(240,162,2,0.15)`,
+          borderRadius: T.radiusMd,
+          fontSize: 11,
+          color: T.textMuted,
+          lineHeight: 1.8
+        }}>
+          <span style={{ color: T.gold, fontWeight: 600, letterSpacing: "0.03em" }}>Nota do Assessor (CFP):</span>
+          {" "}As estratégias apresentadas são baseadas nos dados informados e nas diretrizes técnicas do CFP (Certified Financial Planner), certificação reconhecida internacionalmente como padrão de excelência no planejamento financeiro pessoal. Para a decisão mais adequada ao seu caso, considere também seu perfil de risco, necessidade de liquidez e situação fiscal atual.
         </div>
       </div>
     );
@@ -1043,12 +1235,29 @@ export default function ObjetivoDetalhes() {
       <div style={{ padding: "20px" }}>
 
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+          {/* Botão Voltar */}
+          <button
+            onClick={() => navigate(-1)}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "none", border: "none",
+              color: T.textMuted, cursor: "pointer",
+              fontSize: 12, marginBottom: 20, padding: 0,
+              fontFamily: T.fontFamily, letterSpacing: "0.06em",
+              textTransform: "uppercase", transition: "color 0.2s"
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = T.textPrimary}
+            onMouseLeave={e => e.currentTarget.style.color = T.textMuted}
+          >
+            ← Voltar
+          </button>
+
           <Cabecalho />
 
           <Abas ativa={abaAtiva} onChange={setAbaAtiva} />
 
           {abaAtiva === "resumo" && <Resumo />}
-          {abaAtiva === "simulador" && <Simulador />}
+          {abaAtiva === "simulador" && <Planos />}
           {abaAtiva === "acompanhamento" && <Acompanhamento />}
           {abaAtiva === "ativos" && <Ativos />}
         </div>
