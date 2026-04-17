@@ -312,8 +312,9 @@ function parseRelatorio(text) {
     }
 
     // ── Detectar linha de classe na Posição Detalhada: "ClassName R$ VALUE -" ─
+    // Aceita tanto "VALUE - 17%" quanto "VALUE -17%" (sem espaço após traço)
     const classHdrM = nt_line.match(
-      /^([A-Z][A-Z\s\/\-\.]{2,40}?)\s+R\$\s*([\d.]+,\d{2})\s+-\s/
+      /^([A-Z][A-Z\s\/\-\.]{2,40}?)\s+R\$\s*([\d.]+,\d{2})\s+[-–]/
     );
     if (classHdrM) {
       const key = classNameToKey(classHdrM[1]);
@@ -341,16 +342,29 @@ function parseRelatorio(text) {
     // QTD é um número (inteiro ou decimal) — diferencia de classe (que tem "-")
     if (!currentClassKey) continue;
 
-    // Formato XP: Nome R$ VALOR QTD %ALOC RENT_MES% CDI_MES% RENT_ANO% ...
+    // Formato XP: Nome R$ VALOR [QTD] %ALOC RENT_MES% [CDI%] [RENT_ANO%]
+    // QTD é opcional — alguns PDFs omitem a coluna de quantidade (especialmente Ações)
+    // Lookahead negativo (?!\s*%) garante que QTD não seja confundido com percentual
     const assetM = t.match(
-      /^(.+?)\s+R\$\s*([\d.]+,\d{2})\s+([\d.,]+)\s+([\d,]+)%\s+([-\d,]+)%(?:\s+([-\d,]+)%(?:\s+([-\d,]+)%)?)?/
+      /^(.+?)\s+R\$\s*([\d.]+,\d{2})(?:\s+([\d.,]+)(?!\s*%))?\s+([\d,]+)%\s+([-\d,]+)%(?:\s+([-\d,]+)%(?:\s+([-\d,]+)%)?)?/
     );
-    if (assetM) {
-      const nomeRaw = assetM[1].trim();
-      const valor   = parseBRL(assetM[2]);
+
+    // Fallback: ativo sem colunas de percentual — "Nome R$ Valor [Qty]"
+    // Cobre tickers de ações em PDFs que não exibem rentabilidade por ativo
+    const assetFallbackM = !assetM && (() => {
+      const m = t.match(/^(.+?)\s+R\$\s*([\d.]+,\d{2})(?:\s+[\d.,]+)?\s*$/);
+      if (!m) return null;
+      if (classNameToKey(norm(m[1]))) return null; // É nome de classe, não de ativo
+      return m;
+    })();
+
+    const matchToUse = assetM || assetFallbackM;
+    if (matchToUse) {
+      const nomeRaw = matchToUse[1].trim();
+      const valor   = parseBRL(matchToUse[2]);
       // grupo 5 = RENT_MES, grupo 6 = CDI_MES (opcional), grupo 7 = RENT_ANO (opcional)
-      const rentMes = assetM[5] || "";
-      const rentAno = assetM[7] ? assetM[7].replace(",", ".") : "";
+      const rentMes = assetM ? (assetM[5] || "") : "";
+      const rentAno = assetM && assetM[7] ? assetM[7].replace(",", ".") : "";
 
       if (valor <= 0 || nomeRaw.length < 2) continue;
       if (/^(?:CAIXA|PROVENTOS|TOTAL)/i.test(nomeRaw)) continue;
