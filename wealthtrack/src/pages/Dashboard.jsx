@@ -41,6 +41,7 @@ function calcularPatrimonioTotal(clientes){
   },0);
 }
 
+
 // Conta clientes ativos (com patrimônio > 0)
 function contarClientesAtivos(clientes){
   return clientes.filter(c=>{
