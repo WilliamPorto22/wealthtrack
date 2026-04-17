@@ -359,13 +359,23 @@ function parseRelatorio(text) {
       const vencM = nomeRaw.match(/\b([A-Z]{3}\/\d{2,4})\b/i);
       const vencimento = vencM ? vencM[1].toUpperCase() : "";
 
-      // Remove sufixo de taxa do nome: "- 101,00% CDI" ou "- 114,00% DO CDI"
+      // Limpa o nome em 3 passos:
+      // 1. Remove prefixo IPC-A/IPCA no início: "IPC-A + 10,50% CRI..."  → "CRI..."
+      // 2. Remove sufixo de indexador no fim: "- IPC-A + 8,03%" ou "- 101,00% CDI"
+      // 3. Remove " -" solto no final (carry residual)
       const nome = nomeRaw
-        .replace(/\s*[-–]\s*\d[\d,.]*%[\w\s%]*$/, "")
+        .replace(/^(?:IPC[-\s]*A|IPCA)\s*\+\s*[\d,]+%\s+/i, "")
+        .replace(/\s*[-–]\s*(?:(?:IPC[-\s]*A|IPCA)\s*\+\s*)?[\d,]+%[\w\s%+\-]*$/i, "")
         .replace(/\s*[-–]\s*$/, "")
         .trim();
 
-      const ativosKey = currentClassKey + "Ativos";
+      // Se o nome (antes de limpar) contém "IPC-A +" ou "IPCA+", forçar classe ipca
+      // independentemente do currentClassKey (garante classificação correta mesmo se
+      // o pdfjs não capturou o cabeçalho "Inflação" na linha certa)
+      const isIpca = /(?:IPC[-\s]*A|IPCA)\s*\+/i.test(nomeRaw);
+      const effectiveKey = isIpca ? "ipca" : currentClassKey;
+
+      const ativosKey = effectiveKey + "Ativos";
       if (!result[ativosKey]) result[ativosKey] = [];
 
       // Evita duplicatas (compara nome limpo)

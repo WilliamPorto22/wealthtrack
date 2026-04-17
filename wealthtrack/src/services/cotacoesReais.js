@@ -70,25 +70,24 @@ async function buscarDolar() {
   return { valor: 5.87, tipo: "Fallback" };
 }
 
-// Busca ativo no Yahoo Finance via proxy CORS
-async function buscarYahoo(ticker) {
+// Busca índice de mercado via brapi.dev (CORS suportado, gratuito para cotações básicas)
+async function buscarIndice(ticker) {
   try {
-    // Proxy público para evitar bloqueio CORS
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2d`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0" }
-    });
+    const encoded = encodeURIComponent(ticker); // ex: ^BVSP → %5EBVSP
+    const url = `https://brapi.dev/api/quote/${encoded}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    const meta = json?.chart?.result?.[0]?.meta;
-    if (!meta) throw new Error("Sem dados");
-
-    const atual = meta.regularMarketPrice;
-    const anterior = meta.chartPreviousClose || meta.previousClose;
-    const variacao = anterior ? ((atual - anterior) / anterior * 100) : 0;
-
-    return { valor: atual, variacao, tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje` };
+    const r = json?.results?.[0];
+    if (!r?.regularMarketPrice) throw new Error("Sem dados");
+    const variacao = r.regularMarketChangePercent ?? 0;
+    return {
+      valor: r.regularMarketPrice,
+      variacao,
+      tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje`,
+    };
   } catch (e) {
-    console.error(`Erro Yahoo ${ticker}:`, e);
+    console.warn(`Cotação ${ticker} indisponível:`, e.message);
     return null;
   }
 }
@@ -125,8 +124,8 @@ async function buscarIPCA() {
 export async function obterTodasAsCotacoes() {
   const [dolar, ibovespa, sp500, selic, ipca] = await Promise.allSettled([
     buscarDolar(),
-    buscarYahoo("^BVSP"),
-    buscarYahoo("^GSPC"),
+    buscarIndice("^BVSP"),
+    buscarIndice("^GSPC"),
     buscarSelic(),
     buscarIPCA(),
   ]);
