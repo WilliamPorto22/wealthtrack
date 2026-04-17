@@ -101,16 +101,25 @@ const AVATAR_OPTS = [
   {key:"cachorro",label:"Companheiro"},{key:"gato",label:"Amigável"},
 ];
 const TIPOS_IMOVEL = ["Casa","Apartamento","Cobertura","Terreno","Sítio / Fazenda","Imóvel Comercial","Galpão / Armazém"];
+const TIPOS_VEICULO = ["Carro","SUV","Picape","Moto","Caminhão","Ônibus","Barco","Aeronave","Outros"];
 const FAIXAS_IMOVEL = [
-  {label:"até R$ 300 mil", mid:200000},
-  {label:"R$ 300k – R$ 500k", mid:400000},
-  {label:"R$ 500k – R$ 800k", mid:650000},
-  {label:"R$ 800k – R$ 1 milhão", mid:900000},
-  {label:"R$ 1M – R$ 1,5M", mid:1250000},
-  {label:"R$ 1,5M – R$ 2M", mid:1750000},
-  {label:"R$ 2M – R$ 3M", mid:2500000},
-  {label:"R$ 3M – R$ 5M", mid:4000000},
-  {label:"Acima de R$ 5M", mid:6000000},
+  ...Array.from({length:50},(_,i)=>{const v=(i+1)*100000;return{label:`R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}`,mid:v};}),
+  {label:"R$ 5.500.000,00",mid:5500000},
+  {label:"R$ 6.000.000,00",mid:6000000},
+  {label:"R$ 7.000.000,00",mid:7000000},
+  {label:"R$ 8.000.000,00",mid:8000000},
+  {label:"R$ 9.000.000,00",mid:9000000},
+  {label:"R$ 10.000.000,00",mid:10000000},
+  {label:"Acima de R$ 10M",mid:12000000},
+];
+const FAIXAS_VEICULO = [
+  ...Array.from({length:50},(_,i)=>{const v=(i+1)*10000;return{label:`R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}`,mid:v};}),
+  {label:"R$ 600.000,00",mid:600000},
+  {label:"R$ 700.000,00",mid:700000},
+  {label:"R$ 800.000,00",mid:800000},
+  {label:"R$ 900.000,00",mid:900000},
+  {label:"R$ 1.000.000,00",mid:1000000},
+  {label:"Acima de R$ 1M",mid:1200000},
 ];
 const CLASSES_CARTEIRA = [
   {key:"preFixado", label:"Prefixado", cor:"#F0A202"},
@@ -227,46 +236,49 @@ function BarChartVertical({items}) {
   if(!active.length) return null;
   const maxVal=Math.max(...active.map(i=>i.v));
   const rounded=Math.ceil(maxVal/100000)*100000||1;
-  const H=68, barW=24, gap=14, leftPad=34, topPad=10, botPad=24;
-  const totalW=leftPad+active.length*(barW+gap)-gap+12;
+  const H=52, barW=18, gap=46, leftPad=30, topPad=8, botPad=22;
+  const totalW=leftPad+active.length*(barW+gap)-gap+8;
   const totalH=topPad+H+botPad;
   const ticks=[0,0.5,1].map(t=>rounded*t);
   function yPos(v){return topPad+H-Math.max((v/rounded)*H,0);}
   function lbl(v){
-    if(v>=1000000) return `${(v/1000000).toFixed(v%1000000===0?0:2).replace(".",",")}Mi`;
+    if(v>=1000000) return `${(v/1000000).toFixed(v%1000000===0?0:1).replace(".",",")}Mi`;
     if(v>=1000) return `${Math.round(v/1000)}k`;
     return `${v}`;
   }
   function valLbl(v){
-    if(v>=1000000) return `R$ ${(v/1000000).toFixed(3).replace(".",",")}Mi`;
-    if(v>=1000) return `R$ ${Math.round(v/1000).toLocaleString("pt-BR")}k`;
+    if(v>=1000000) return `R$ ${(v/1000000).toFixed(2).replace(".",",")}Mi`;
+    if(v>=1000) return `R$ ${Math.round(v/1000)}k`;
     return `R$ ${v}`;
   }
+  function shortLabel(s){return s.length>8?s.slice(0,7)+"…":s;}
   return (
-    <svg viewBox={`0 0 ${totalW} ${totalH}`} width="100%" style={{overflow:"visible",...noEdit}}>
-      {/* Grid + Y labels */}
-      {ticks.map((t,i)=>(
-        <g key={i}>
-          <line x1={leftPad} y1={yPos(t)} x2={totalW-4} y2={yPos(t)} stroke="rgba(255,255,255,0.07)" strokeWidth={0.5}/>
-          <text x={leftPad-5} y={yPos(t)+3.5} textAnchor="end" fontSize={8} fill={T.textMuted} fontFamily={T.fontFamily}>{lbl(t)}</text>
-        </g>
-      ))}
-      {/* Bars */}
-      {active.map((item,i)=>{
-        const x=leftPad+i*(barW+gap);
-        const bH=Math.max((item.v/rounded)*H,3);
-        const y=yPos(item.v);
-        return (
-          <g key={item.label}>
-            <rect x={x} y={y} width={barW} height={bH} fill={item.cor} rx={4} opacity={0.88}/>
-            <text x={x+barW/2} y={y-5} textAnchor="middle" fontSize={7.5} fill={item.cor} fontFamily={T.fontFamily}>{valLbl(item.v)}</text>
-            <text x={x+barW/2} y={topPad+H+17} textAnchor="middle" fontSize={8} fill={T.textMuted} fontFamily={T.fontFamily}>{item.label}</text>
+    <div style={{display:"flex",justifyContent:"center",width:"100%"}}>
+      <svg viewBox={`0 0 ${totalW} ${totalH}`} height={86} style={{overflow:"visible",...noEdit}}>
+        {/* Grid + Y labels */}
+        {ticks.map((t,i)=>(
+          <g key={i}>
+            <line x1={leftPad} y1={yPos(t)} x2={totalW-2} y2={yPos(t)} stroke="rgba(255,255,255,0.07)" strokeWidth={0.5}/>
+            <text x={leftPad-4} y={yPos(t)+3.5} textAnchor="end" fontSize={7} fill={T.textMuted} fontFamily={T.fontFamily}>{lbl(t)}</text>
           </g>
-        );
-      })}
-      {/* Baseline */}
-      <line x1={leftPad} y1={topPad+H} x2={totalW-4} y2={topPad+H} stroke="rgba(255,255,255,0.12)" strokeWidth={0.5}/>
-    </svg>
+        ))}
+        {/* Bars */}
+        {active.map((item,i)=>{
+          const x=leftPad+i*(barW+gap);
+          const bH=Math.max((item.v/rounded)*H,3);
+          const y=yPos(item.v);
+          return (
+            <g key={item.label}>
+              <rect x={x} y={y} width={barW} height={bH} fill={item.cor} rx={3} opacity={0.88}/>
+              <text x={x+barW/2} y={y-4} textAnchor="middle" fontSize={7} fill={item.cor} fontFamily={T.fontFamily}>{valLbl(item.v)}</text>
+              <text x={x+barW/2} y={topPad+H+14} textAnchor="middle" fontSize={7} fill={T.textMuted} fontFamily={T.fontFamily}>{shortLabel(item.label)}</text>
+            </g>
+          );
+        })}
+        {/* Baseline */}
+        <line x1={leftPad} y1={topPad+H} x2={totalW-2} y2={topPad+H} stroke="rgba(255,255,255,0.12)" strokeWidth={0.5}/>
+      </svg>
+    </div>
   );
 }
 
@@ -292,28 +304,12 @@ function RingChart({data, total, size=180}) {
     angle+=sweep;
     return {...d,dashLen,rot,pct};
   });
+  const circ=2*Math.PI*R;
   return(
     <svg width={size} height={size} style={noEdit}>
-      <defs>
-        {segs.map((s,i)=>(
-          <filter key={i} id={`rg_${size}_${i}`} x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="blur"/>
-            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        ))}
-        <radialGradient id={`rgCenter_${size}`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.03)"/>
-          <stop offset="100%" stopColor="rgba(0,0,0,0)"/>
-        </radialGradient>
-      </defs>
-      {/* Rings decorativos */}
-      <circle cx={cx} cy={cy} r={R+SW/2+6} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
-      <circle cx={cx} cy={cy} r={R-SW/2-6} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5"/>
       {/* Track */}
-      <circle cx={cx} cy={cy} r={R} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={SW}/>
-      {/* Glow fill central */}
-      <circle cx={cx} cy={cy} r={R-SW/2-6} fill={`url(#rgCenter_${size})`}/>
-      {/* Segmentos */}
+      <circle cx={cx} cy={cy} r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={SW}/>
+      {/* Segmentos sem glow */}
       {segs.map((s,i)=>(
         <circle
           key={i}
@@ -321,11 +317,10 @@ function RingChart({data, total, size=180}) {
           fill="none"
           stroke={s.cor||s.color}
           strokeWidth={SW}
-          strokeDasharray={`${s.dashLen} ${C}`}
+          strokeDasharray={`${s.dashLen} ${circ}`}
           strokeLinecap="round"
           transform={`rotate(${s.rot},${cx},${cy})`}
-          filter={`url(#rg_${size}_${i})`}
-          opacity={0.93}
+          opacity={0.9}
         />
       ))}
       {/* Centro */}
@@ -372,7 +367,7 @@ export default function ClienteFicha() {
     statusAporteMes:"",nextContactDate:"",notes:"",
     gastosMensaisManual:"",aporteRegistradoMes:"",
     salarioMensal:"",metaAporteMensal:"",
-    imoveis:[],veiculoValor:"",
+    imoveis:[],veiculos:[],veiculoValor:"",
   });
   const savedDataRef = useRef({});
 
@@ -404,7 +399,7 @@ export default function ClienteFicha() {
         avatar:"homem",statusAporteMes:"",nextContactDate:"",notes:"",
         gastosMensaisManual:"",aporteRegistradoMes:"",
         salarioMensal:"",metaAporteMensal:"",
-        imoveis:[],veiculoValor:"",
+        imoveis:[],veiculos:[],veiculoValor:"",
         ...s.data()
       };
       formRef.current={...data};
@@ -440,14 +435,22 @@ export default function ClienteFicha() {
   // Portfolio total
   const totalCarteira = CLASSES_CARTEIRA.reduce((acc,c)=>acc+parseCentavos(snap.carteira?.[c.key])/100,0);
 
-  // Real estate total (midpoints)
+  // Real estate total (midpoints × quantity)
   const totalImoveis = (snap.imoveis||[]).reduce((acc,im)=>{
     const f=FAIXAS_IMOVEL.find(x=>x.label===im.faixa);
-    return acc+(f?f.mid:0);
+    const qtd=Math.max(parseInt(im.quantidade)||1,1);
+    return acc+(f?f.mid*qtd:0);
   },0);
 
-  // Vehicles
-  const totalVeiculos = parseCentavos(snap.veiculoValor)/100;
+  // Vehicles array total
+  const totalVeiculosArray = (snap.veiculos||[]).reduce((acc,v)=>{
+    const f=FAIXAS_VEICULO.find(x=>x.label===v.faixa);
+    const qtd=Math.max(parseInt(v.quantidade)||1,1);
+    return acc+(f?f.mid*qtd:0);
+  },0);
+  // Legacy single field
+  const totalVeiculosLegacy = parseCentavos(snap.veiculoValor)/100;
+  const totalVeiculos = totalVeiculosArray>0 ? totalVeiculosArray : totalVeiculosLegacy;
 
   // Total patrimônio
   const patrimonioCalculado = totalCarteira+totalImoveis+totalVeiculos;
@@ -502,9 +505,13 @@ export default function ClienteFicha() {
   function handleNaoAportou(){setFSnap("statusAporteMes","nao_aportou");setDataProximoContato(proximoDia1());setModalNaoAportou(true);}
   function confirmarNaoAportou(){setFSnap("nextContactDate",dataProximoContato);setModalNaoAportou(false);setDataProximoContato("");}
 
-  function adicionarImovel(){const n=[...(snap.imoveis||[]),{tipo:"Casa",faixa:"R$ 300k – R$ 500k"}];setFSnap("imoveis",n);}
+  function adicionarImovel(){const n=[...(snap.imoveis||[]),{tipo:"Casa",nome:"",quantidade:1,faixa:"R$ 500.000,00"}];setFSnap("imoveis",n);}
   function removerImovel(i){const n=(snap.imoveis||[]).filter((_,idx)=>idx!==i);setFSnap("imoveis",n);}
   function atualizarImovel(i,campo,valor){const n=(snap.imoveis||[]).map((im,idx)=>idx===i?{...im,[campo]:valor}:im);setFSnap("imoveis",n);}
+
+  function adicionarVeiculo(){const n=[...(snap.veiculos||[]),{tipo:"Carro",nome:"",quantidade:1,faixa:"R$ 50.000,00"}];setFSnap("veiculos",n);}
+  function removerVeiculo(i){const n=(snap.veiculos||[]).filter((_,idx)=>idx!==i);setFSnap("veiculos",n);}
+  function atualizarVeiculo(i,campo,valor){const n=(snap.veiculos||[]).map((v,idx)=>idx===i?{...v,[campo]:valor}:v);setFSnap("veiculos",n);}
 
   async function salvar(){
     if(!formRef.current.nome){setMsg("Nome é obrigatório.");return;}
@@ -870,16 +877,29 @@ export default function ClienteFicha() {
               <div style={{fontSize:12,color:T.textMuted,marginBottom:12,padding:"12px 0",...noEdit}}>Nenhum imóvel cadastrado.</div>
             )}
             {(snap.imoveis||[]).map((im,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:10,marginBottom:10,alignItems:"end"}}>
-                <div>
-                  {i===0&&<Lbl>Tipo</Lbl>}
-                  <CustomSelect value={im.tipo} onChange={v=>atualizarImovel(i,"tipo",v)} options={TIPOS_IMOVEL}/>
+              <div key={i} style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:12,padding:"14px",marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontSize:10,color:"#22c55e",textTransform:"uppercase",letterSpacing:"0.1em",...noEdit}}>Imóvel {i+1}</div>
+                  <button onClick={()=>removerImovel(i)} style={{padding:"4px 10px",background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Remover</button>
                 </div>
-                <div>
-                  {i===0&&<Lbl>Faixa de valor</Lbl>}
-                  <CustomSelect value={im.faixa} onChange={v=>atualizarImovel(i,"faixa",v)} options={FAIXAS_IMOVEL.map(f=>f.label)}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <div>
+                    <Lbl>Tipo de imóvel</Lbl>
+                    <CustomSelect value={im.tipo} onChange={v=>atualizarImovel(i,"tipo",v)} options={TIPOS_IMOVEL}/>
+                  </div>
+                  <div>
+                    <Lbl>Nome / Identificação</Lbl>
+                    <InputTexto key={`im-nome-${i}`} initValue={im.nome||""} onCommit={v=>atualizarImovel(i,"nome",v)} placeholder="Ex: Casa principal"/>
+                  </div>
+                  <div>
+                    <Lbl>Quantidade</Lbl>
+                    <input type="number" min="1" max="99" value={im.quantidade||1} onChange={e=>atualizarImovel(i,"quantidade",Math.max(1,parseInt(e.target.value)||1))} style={{...C.input,width:"100%"}}/>
+                  </div>
+                  <div>
+                    <Lbl>Valor (R$)</Lbl>
+                    <CustomSelect value={im.faixa} onChange={v=>atualizarImovel(i,"faixa",v)} options={FAIXAS_IMOVEL.map(f=>f.label)}/>
+                  </div>
                 </div>
-                <button onClick={()=>removerImovel(i)} style={{padding:"0 12px",height:48,background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",borderRadius:10,color:"#ef4444",fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginTop:i===0?26:0}}>×</button>
               </div>
             ))}
             <button onClick={adicionarImovel} style={{padding:"10px 16px",background:"rgba(240,162,2,0.06)",border:"0.5px solid rgba(240,162,2,0.2)",borderRadius:9,color:"#F0A202",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em",marginBottom:20}}>
@@ -887,10 +907,39 @@ export default function ClienteFicha() {
             </button>
 
             {/* Veículos */}
-            <div style={{marginBottom:20}}>
-              <Lbl>Valor total dos veículos</Lbl>
-              <InputMoeda key={`vei-${id}`} initValue={snap.veiculoValor} onCommit={v=>setFSnap("veiculoValor",v)} placeholder="R$ 0,00"/>
-            </div>
+            <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>Veículos</div>
+            {(snap.veiculos||[]).length===0&&(
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:12,padding:"12px 0",...noEdit}}>Nenhum veículo cadastrado.</div>
+            )}
+            {(snap.veiculos||[]).map((v,i)=>(
+              <div key={i} style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:12,padding:"14px",marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{fontSize:10,color:"#60a5fa",textTransform:"uppercase",letterSpacing:"0.1em",...noEdit}}>Veículo {i+1}</div>
+                  <button onClick={()=>removerVeiculo(i)} style={{padding:"4px 10px",background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Remover</button>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <div>
+                    <Lbl>Tipo de veículo</Lbl>
+                    <CustomSelect value={v.tipo} onChange={val=>atualizarVeiculo(i,"tipo",val)} options={TIPOS_VEICULO}/>
+                  </div>
+                  <div>
+                    <Lbl>Nome / Identificação</Lbl>
+                    <InputTexto key={`ve-nome-${i}`} initValue={v.nome||""} onCommit={val=>atualizarVeiculo(i,"nome",val)} placeholder="Ex: Honda Civic"/>
+                  </div>
+                  <div>
+                    <Lbl>Quantidade</Lbl>
+                    <input type="number" min="1" max="99" value={v.quantidade||1} onChange={e=>atualizarVeiculo(i,"quantidade",Math.max(1,parseInt(e.target.value)||1))} style={{...C.input,width:"100%"}}/>
+                  </div>
+                  <div>
+                    <Lbl>Valor (R$)</Lbl>
+                    <CustomSelect value={v.faixa} onChange={val=>atualizarVeiculo(i,"faixa",val)} options={FAIXAS_VEICULO.map(f=>f.label)}/>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <button onClick={adicionarVeiculo} style={{padding:"10px 16px",background:"rgba(96,165,250,0.06)",border:"0.5px solid rgba(96,165,250,0.2)",borderRadius:9,color:"#60a5fa",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em",marginBottom:20}}>
+              + Adicionar veículo
+            </button>
 
             <button onClick={salvar} disabled={salvando} style={{...C.btnPrimary,marginTop:4}}>
               {salvando?"Salvando...":"Salvar alterações"}
@@ -930,7 +979,7 @@ export default function ClienteFicha() {
                   return (
                     <>
                       {/* ── Gráficos: barras + ring chart lado a lado ── */}
-                      <div style={{display:"grid",gridTemplateColumns:"5fr 7fr",gap:12,marginBottom:20}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20,alignItems:"stretch"}}>
 
                         {/* Painel esquerdo: barras compactas */}
                         <div style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:14,padding:"14px 10px"}}>
@@ -976,54 +1025,66 @@ export default function ClienteFicha() {
                       {(()=>{
                         const patFin=totalCarteira>0?totalCarteira:patrimonioManual;
                         return patFin>0?(
-                          <div style={{marginBottom:16}}>
-                            <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:8,...noEdit}}>Patrimônio Financeiro</div>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",background:"linear-gradient(135deg,rgba(240,162,2,0.08),rgba(240,162,2,0.03))",border:"1px solid rgba(240,162,2,0.28)",borderRadius:12,...noEdit}}>
+                          <div style={{marginBottom:8}}>
+                            <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:6,...noEdit}}>Patrimônio Financeiro</div>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"rgba(240,162,2,0.05)",border:"0.5px solid rgba(240,162,2,0.18)",borderRadius:10,marginBottom:6,...noEdit}}>
                               <div style={{display:"flex",alignItems:"center",gap:10}}>
-                                <div style={{width:36,height:36,borderRadius:9,background:"rgba(240,162,2,0.1)",border:"0.5px solid rgba(240,162,2,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>📊</div>
+                                <div style={{width:36,height:36,borderRadius:9,background:"rgba(240,162,2,0.08)",border:"0.5px solid rgba(240,162,2,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>📊</div>
                                 <div>
                                   <div style={{fontSize:13,color:"#e2e8f0",fontWeight:400}}>Carteira de Investimentos</div>
                                   <div style={{fontSize:10,color:"#748CAB",marginTop:2}}>{totalCarteira>0?"Declarado na carteira":"Informado no cadastro"}</div>
                                 </div>
                               </div>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:18,fontWeight:300,color:"#F0A202",letterSpacing:"-0.01em"}}>{moedaFull(patFin)}</div>
-                              </div>
+                              <span style={{fontSize:13,color:"#F0A202",fontWeight:400}}>{moedaFull(patFin)}</span>
                             </div>
                           </div>
                         ):null;
                       })()}
 
                       {/* ── Bens Cadastrados ── */}
-                      {((snap.imoveis||[]).length>0||totalVeiculos>0)&&(
-                        <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:8,...noEdit}}>Bens Cadastrados</div>
+                      {((snap.imoveis||[]).length>0||(snap.veiculos||[]).length>0||totalVeiculosLegacy>0)&&(
+                        <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:6,...noEdit}}>Bens Cadastrados</div>
                       )}
 
                       {/* Imóveis */}
                       {(snap.imoveis||[]).map((im,i)=>(
-                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:"rgba(34,197,94,0.05)",border:"0.5px solid rgba(34,197,94,0.14)",borderRadius:10,marginBottom:6,...noEdit}}>
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"rgba(34,197,94,0.05)",border:"0.5px solid rgba(34,197,94,0.14)",borderRadius:10,marginBottom:6,...noEdit}}>
                           <div style={{display:"flex",alignItems:"center",gap:10}}>
-                            <span style={{fontSize:16}}>🏠</span>
+                            <div style={{width:36,height:36,borderRadius:9,background:"rgba(34,197,94,0.08)",border:"0.5px solid rgba(34,197,94,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🏠</div>
                             <div>
-                              <div style={{fontSize:12,color:"#e2e8f0"}}>{im.tipo}</div>
-                              <div style={{fontSize:10,color:"#748CAB",marginTop:1}}>Imóvel</div>
+                              <div style={{fontSize:13,color:"#e2e8f0",fontWeight:400}}>{im.nome||im.tipo}</div>
+                              <div style={{fontSize:10,color:"#748CAB",marginTop:2}}>{im.tipo}{parseInt(im.quantidade)>1?` · ${im.quantidade}x`:""} · Imóvel</div>
                             </div>
                           </div>
                           <span style={{fontSize:13,color:"#22c55e",fontWeight:400}}>{im.faixa}</span>
                         </div>
                       ))}
 
-                      {/* Veículos */}
-                      {totalVeiculos>0&&(
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",background:"rgba(96,165,250,0.05)",border:"0.5px solid rgba(96,165,250,0.14)",borderRadius:10,marginBottom:6,...noEdit}}>
+                      {/* Veículos (array) */}
+                      {(snap.veiculos||[]).map((v,i)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"rgba(96,165,250,0.05)",border:"0.5px solid rgba(96,165,250,0.14)",borderRadius:10,marginBottom:6,...noEdit}}>
                           <div style={{display:"flex",alignItems:"center",gap:10}}>
-                            <span style={{fontSize:16}}>🚗</span>
+                            <div style={{width:36,height:36,borderRadius:9,background:"rgba(96,165,250,0.08)",border:"0.5px solid rgba(96,165,250,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🚗</div>
                             <div>
-                              <div style={{fontSize:12,color:"#e2e8f0"}}>Veículos</div>
-                              <div style={{fontSize:10,color:"#748CAB",marginTop:1}}>Frota declarada</div>
+                              <div style={{fontSize:13,color:"#e2e8f0",fontWeight:400}}>{v.nome||v.tipo}</div>
+                              <div style={{fontSize:10,color:"#748CAB",marginTop:2}}>{v.tipo}{parseInt(v.quantidade)>1?` · ${v.quantidade}x`:""} · Veículo</div>
                             </div>
                           </div>
-                          <span style={{fontSize:13,color:"#60a5fa",fontWeight:400}}>{formatMi(totalVeiculos)}</span>
+                          <span style={{fontSize:13,color:"#60a5fa",fontWeight:400}}>{v.faixa}</span>
+                        </div>
+                      ))}
+
+                      {/* Veículos legado (campo único antigo) */}
+                      {totalVeiculosLegacy>0&&(snap.veiculos||[]).length===0&&(
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 14px",background:"rgba(96,165,250,0.05)",border:"0.5px solid rgba(96,165,250,0.14)",borderRadius:10,marginBottom:6,...noEdit}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
+                            <div style={{width:36,height:36,borderRadius:9,background:"rgba(96,165,250,0.08)",border:"0.5px solid rgba(96,165,250,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🚗</div>
+                            <div>
+                              <div style={{fontSize:13,color:"#e2e8f0",fontWeight:400}}>Veículos</div>
+                              <div style={{fontSize:10,color:"#748CAB",marginTop:2}}>Frota declarada</div>
+                            </div>
+                          </div>
+                          <span style={{fontSize:13,color:"#60a5fa",fontWeight:400}}>{formatMi(totalVeiculosLegacy)}</span>
                         </div>
                       )}
                     </>
