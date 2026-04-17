@@ -12,6 +12,7 @@ const TAXA_ANUAL = 14;
 const TIPOS = [
   { id:"aposentadoria", label:"Aposentadoria e Liberdade Financeira" },
   { id:"imovel",        label:"Aquisição de Imóvel" },
+  { id:"carro",         label:"Comprar Carro" },
   { id:"viagem",        label:"Viagens e Experiências" },
   { id:"educacao",      label:"Educação dos Filhos" },
   { id:"saude",         label:"Saúde e Qualidade de Vida" },
@@ -87,6 +88,7 @@ const labelStatus = { viavel: "Viável", ajustavel: "Ajustável", inviavel: "Inv
 const coresPorTipo = {
   aposentadoria:       "#FFCA3A",
   imovel:              "#8AC926",
+  carro:               "#FF6B35",
   viagem:              "#5DD9C1",
   educacao:            "#2274A5",
   saude:               "#1982C4",
@@ -98,6 +100,7 @@ const coresPorTipo = {
 const gradientsPorTipo = {
   aposentadoria:       "linear-gradient(145deg, #2a1f00 0%, #3d2e00 60%, rgba(255,202,58,0.18) 100%)",
   imovel:              "linear-gradient(145deg, #0f2006 0%, #1a360a 60%, rgba(138,201,38,0.18) 100%)",
+  carro:               "linear-gradient(145deg, #2a0e00 0%, #3d1800 60%, rgba(255,107,53,0.18) 100%)",
   viagem:              "linear-gradient(145deg, #042522 0%, #0a3430 60%, rgba(93,217,193,0.18) 100%)",
   educacao:            "linear-gradient(145deg, #061c32 0%, #0d2a48 60%, rgba(34,116,165,0.18) 100%)",
   saude:               "linear-gradient(145deg, #041626 0%, #082238 60%, rgba(25,130,196,0.18) 100%)",
@@ -108,6 +111,7 @@ const gradientsPorTipo = {
 const emojisPorTipo = {
   aposentadoria: "🏖️",
   imovel: "🏠",
+  carro: "🚗",
   viagem: "✈️",
   educacao: "📚",
   saude: "💪",
@@ -190,18 +194,6 @@ export default function Objetivos() {
     const ultimo = tabela[tabela.length - 1];
     return { anosNec, status, ultimo, inicial, aporte, meta, prazo };
   }
-
-  // ── NAVBAR ──
-  const Navbar = () => (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 20px", borderBottom:`0.5px solid ${T.border}`, background:T.bg, position:"sticky", top:0, zIndex:100 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }} onClick={() => navigate("/dashboard")}>
-        <div style={{ width:32, height:32, borderRadius:8, background:"linear-gradient(135deg,#1a3560,#0d2040)", border:"1px solid rgba(240,162,2,0.3)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <span style={{ fontSize:13, color:"#F0A202", fontWeight:500 }}>P</span>
-        </div>
-        <span style={{ fontSize:13, color:T.textPrimary, fontWeight:400 }}>Porto Invest</span>
-      </div>
-    </div>
-  );
 
   // ── BOTÃO FLUTUANTE VOLTAR ──
   const BotoesNavegacao = () => {
@@ -296,7 +288,7 @@ export default function Objetivos() {
               <div style={{ flex:1, height:"0.5px", background:T.border }}/>
             </div>
 
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))", gap:16, marginBottom:28 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:16, marginBottom:28, alignItems:"stretch" }}>
             {objetivos.map((obj, i) => {
               const { anosNec, status, ultimo, inicial, aporte, meta, prazo } = diagnostico(obj);
               const cor = corStatus[status];
@@ -306,13 +298,13 @@ export default function Objetivos() {
               const emoji = emojisPorTipo[obj.tipo] || "⭐";
 
               return (
-                <div key={i} style={{ marginBottom:20 }}>
+                <div key={i} style={{ display:"flex", flexDirection:"column" }}>
                   {/* Card do objetivo — NUBANK STYLE */}
                   <div style={{
                     background: gradient,
                     borderRadius: 16,
                     padding: "20px 18px",
-                    minHeight: 240,
+                    flex: 1,
                     display: "flex",
                     flexDirection: "column",
                     justifyContent: "space-between",

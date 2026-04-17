@@ -42,6 +42,7 @@ function formatarPorcentagem(valor) {
 const emojisPorTipo = {
   aposentadoria: "🏖️",
   imovel: "🏠",
+  carro: "🚗",
   viagem: "✈️",
   educacao: "📚",
   saude: "💪",
@@ -50,13 +51,14 @@ const emojisPorTipo = {
 };
 
 const gradientsPorTipo = {
-  aposentadoria: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-  imovel: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-  viagem: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
-  educacao: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
-  saude: "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
-  sucessaoPatrimonial: "linear-gradient(135deg, #30cfd0 0%, #330867 100%)",
-  personalizado: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)"
+  aposentadoria:       "linear-gradient(145deg, #2a1f00 0%, #3d2e00 60%, rgba(255,202,58,0.18) 100%)",
+  imovel:              "linear-gradient(145deg, #0f2006 0%, #1a360a 60%, rgba(138,201,38,0.18) 100%)",
+  carro:               "linear-gradient(145deg, #2a0e00 0%, #3d1800 60%, rgba(255,107,53,0.18) 100%)",
+  viagem:              "linear-gradient(145deg, #042522 0%, #0a3430 60%, rgba(93,217,193,0.18) 100%)",
+  educacao:            "linear-gradient(145deg, #061c32 0%, #0d2a48 60%, rgba(34,116,165,0.18) 100%)",
+  saude:               "linear-gradient(145deg, #041626 0%, #082238 60%, rgba(25,130,196,0.18) 100%)",
+  sucessaoPatrimonial: "linear-gradient(145deg, #0c0820 0%, #160f30 60%, rgba(106,76,147,0.18) 100%)",
+  personalizado:       "linear-gradient(145deg, #001f10 0%, #003218 60%, rgba(0,204,102,0.18) 100%)",
 };
 
 const labelStatus = { viavel: "Plano Viável", ajustavel: "Plano Ajustável", inviavel: "Plano Inviável" };
@@ -84,6 +86,12 @@ export default function ObjetivoDetalhes() {
   const [inputAporte, setInputAporte] = useState("");
   const [inputTaxa, setInputTaxa] = useState("");
   const [inputPrazo, setInputPrazo] = useState("");
+
+  // Acompanhamento mensal
+  const [editandoMes, setEditandoMes] = useState(null);
+  const [formEditMes, setFormEditMes] = useState({});
+  const [salvandoMes, setSalvandoMes] = useState(false);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
 
   // Carregar dados do cliente e objetivo
   useEffect(() => {
@@ -440,6 +448,30 @@ export default function ObjetivoDetalhes() {
     setSimPrazo(simularNovoPrazo(inicial, aporte, meta, novo));
   };
 
+  async function salvarMesHistorico(mesAnoKey, dados) {
+    setSalvandoMes(true);
+    try {
+      const snap = await getDoc(doc(db, "clientes", clienteId));
+      if (snap.exists()) {
+        const dadosCliente = snap.data();
+        const objs = [...(dadosCliente.objetivos || [])];
+        const idx = parseInt(objetivoIndex);
+        const histAtual = [...(objs[idx]?.historicoAcompanhamento || [])];
+        const entradaIdx = histAtual.findIndex(h => h.mesAno === mesAnoKey);
+        const novaEntrada = { mesAno: mesAnoKey, ...dados, atualizadoEm: new Date().toISOString() };
+        if (entradaIdx >= 0) histAtual[entradaIdx] = novaEntrada;
+        else histAtual.push(novaEntrada);
+        objs[idx] = { ...objs[idx], historicoAcompanhamento: histAtual };
+        await setDoc(doc(db, "clientes", clienteId), { ...dadosCliente, objetivos: objs });
+        setObjetivo(objs[idx]);
+      }
+    } catch (e) {
+      console.error("Erro ao salvar histórico:", e);
+    }
+    setSalvandoMes(false);
+    setEditandoMes(null);
+  }
+
   const Simulador = () => {
 
     return (
@@ -684,150 +716,286 @@ export default function ObjetivoDetalhes() {
 
   // ── SEÇÃO 4: ACOMPANHAMENTO MENSAL ──
   const Acompanhamento = () => {
-    // Calcular patrimônio esperado para cada mês
-    const j = Math.pow(1 + TAXA_ANUAL / 100, 1 / 12) - 1;
-    let patrimonioMesAnterior = inicial;
-    const dadosMeses = [];
+    const historico = objetivo?.historicoAcompanhamento || [];
+    const temHistorico = historico.length > 0;
 
-    for (let mes = 1; mes <= 24; mes++) {
-      patrimonioMesAnterior = patrimonioMesAnterior * (1 + j) + aporte;
-      const movimentacao = cliente?.acompanhamentoMensal?.find(m => m.mes === mes % 12 || 12);
-      const aporteRealizado = movimentacao?.aporteRealizado || 0;
-      const atingiu = aporteRealizado >= (aporte * 100);
-      const ehFuturo = mes > 12;
+    const hoje = new Date();
+    const mesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const totalMeses = Math.max(prazo * 12, 12);
 
-      dadosMeses.push({
-        mes,
-        mesNum: mes % 12 || 12,
-        ano: Math.ceil(mes / 12),
-        patrimonioEsperado: patrimonioMesAnterior,
-        aporteRealizado,
-        atingiu,
-        temDados: mes <= 12 && !!movimentacao,
-        ehFuturo
+    const jMensal = Math.pow(1 + TAXA_ANUAL / 100, 1 / 12) - 1;
+    const metaRentPct = parseFloat((jMensal * 100).toFixed(2));
+
+    // Gera linhas: mês atual até fim do prazo
+    const linhas = [];
+    let patrimonioAlvo = inicial;
+    for (let i = 0; i < totalMeses; i++) {
+      const data = new Date(mesAtual.getFullYear(), mesAtual.getMonth() + i, 1);
+      const mesAnoKey = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
+      const mesLabel = data.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+      patrimonioAlvo = patrimonioAlvo * (1 + jMensal) + aporte;
+      const dadoHist = historico.find(h => h.mesAno === mesAnoKey);
+      const isAtual = i === 0;
+      const isFuturo = i > 0;
+      let statusMes = null;
+      if (dadoHist) {
+        const aOk = (dadoHist.aporteRealizado || 0) >= aporte;
+        const rOk = (dadoHist.rentabilidadeCarteira || 0) >= metaRentPct;
+        statusMes = aOk && rOk ? "meta_batida" : aOk || rOk ? "meta_parcial" : "nao_bateu";
+      }
+      linhas.push({
+        mesAnoKey, mesLabel, isAtual, isFuturo, patrimonioAlvo,
+        valorCarteira: dadoHist?.valorCarteira ?? (isAtual ? inicial : null),
+        aporteRealizado: dadoHist?.aporteRealizado ?? null,
+        rentReal: dadoHist?.rentabilidadeCarteira ?? null,
+        statusMes, temDados: !!dadoHist,
       });
+    }
+
+    const thS = {
+      padding: "12px 14px", textAlign: "left", fontSize: 12,
+      color: T.textMuted, fontWeight: 500, whiteSpace: "nowrap",
+      borderRight: `0.5px solid ${T.border}`,
+    };
+    const tdS = {
+      padding: "11px 14px", fontSize: 13, color: T.textPrimary,
+      borderRight: `0.5px solid ${T.border}`, whiteSpace: "nowrap",
+    };
+
+    function PillStatus({ s }) {
+      if (!s) return <span style={{ color: T.textMuted, fontSize: 10 }}>—</span>;
+      const map = {
+        meta_batida: ["Meta Batida", "#22c55e", "rgba(34,197,94,0.12)"],
+        meta_parcial: ["Meta Parcial", "#f59e0b", "rgba(245,158,11,0.12)"],
+        nao_bateu:   ["Não Bateu",   "#ef4444", "rgba(239,68,68,0.12)"],
+      };
+      const [label, cor, bg] = map[s] || ["—", T.textMuted, "transparent"];
+      return (
+        <span style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: bg, color: cor, fontWeight: 600, whiteSpace: "nowrap" }}>
+          {label}
+        </span>
+      );
     }
 
     return (
       <div>
-        <div style={{ fontSize: 13, color: T.textSecondary, marginBottom: 16, fontWeight: 500 }}>
-          📊 ACOMPANHAMENTO: PASSADO (12 MESES) + FUTURO (12 MESES)
+        {/* ── Histórico accordion ── */}
+        <div style={{ border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, marginBottom: 24, overflow: "hidden" }}>
+          <button
+            onClick={() => setHistoricoAberto(h => !h)}
+            style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "rgba(255,255,255,0.02)", border: "none", cursor: "pointer", color: T.textPrimary, fontFamily: T.fontFamily }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13 }}>📋</span>
+              <span style={{ fontSize: 13, fontWeight: 400 }}>Histórico Registrado</span>
+              {temHistorico
+                ? <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>{historico.length} {historico.length === 1 ? "mês" : "meses"}</span>
+                : <span style={{ fontSize: 11, color: T.textMuted }}>— Nenhum dado registrado ainda</span>
+              }
+            </div>
+            <span style={{ color: T.textMuted, fontSize: 14 }}>{historicoAberto ? "▲" : "▼"}</span>
+          </button>
+
+          {historicoAberto && (
+            <div style={{ borderTop: `0.5px solid ${T.border}` }}>
+              {!temHistorico && (
+                <div style={{ padding: 24, textAlign: "center", fontSize: 12, color: T.textMuted }}>
+                  Conforme os meses passarem, os dados registrados aparecerão aqui.
+                </div>
+              )}
+              {temHistorico && historico
+                .slice()
+                .sort((a, b) => b.mesAno.localeCompare(a.mesAno))
+                .map((h, i) => {
+                  const lbl = new Date(h.mesAno + "-01").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+                  const aOk = (h.aporteRealizado || 0) >= aporte;
+                  const rOk = (h.rentabilidadeCarteira || 0) >= metaRentPct;
+                  const st = aOk && rOk ? "meta_batida" : aOk || rOk ? "meta_parcial" : "nao_bateu";
+                  return (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px", borderBottom: i < historico.length - 1 ? `0.5px solid ${T.border}` : "none", fontSize: 12 }}>
+                      <span style={{ color: T.textPrimary, textTransform: "capitalize" }}>{lbl}</span>
+                      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                        <span style={{ color: T.textSecondary }}>Carteira: {brl(h.valorCarteira || 0)}</span>
+                        <span style={{ color: T.textSecondary }}>Aporte: {brl(h.aporteRealizado || 0)}</span>
+                        <span style={{ color: T.textSecondary }}>Rent.: {(h.rentabilidadeCarteira || 0).toFixed(2)}%</span>
+                        <PillStatus s={st} />
+                      </div>
+                    </div>
+                  );
+                })
+              }
+            </div>
+          )}
         </div>
 
-        <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: `0.5px solid ${T.border}`,
-          borderRadius: T.radiusMd,
-          overflow: "hidden"
-        }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        {/* ── Cabeçalho da tabela ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: T.textMuted, marginBottom: 3 }}>
+              Plano de Acompanhamento
+            </div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>
+              {prazo} {prazo === 1 ? "ano" : "anos"} · {totalMeses} meses · Clique num mês para registrar dados realizados
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: T.textSecondary, textAlign: "right" }}>
+            Meta final: {brl(meta)}<br/>
+            <span style={{ color: T.textMuted }}>Aporte comprometido: {brl(aporte)}/mês</span>
+          </div>
+        </div>
+
+        {/* ── Tabela ── */}
+        <div style={{ background: "rgba(255,255,255,0.02)", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 740 }}>
             <thead>
-              <tr style={{ borderBottom: `0.5px solid ${T.border}`, background: "rgba(255,255,255,0.02)" }}>
-                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Período</th>
-                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Planejado</th>
-                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Realizado</th>
-                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Patrimônio Esperado</th>
-                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Status</th>
+              <tr style={{ borderBottom: `0.5px solid ${T.border}`, background: "rgba(255,255,255,0.03)" }}>
+                <th style={thS}>Mês / Ano</th>
+                <th style={{ ...thS, textAlign: "right" }}>Valor Alvo</th>
+                <th style={{ ...thS, textAlign: "right" }}>Carteira Atual</th>
+                <th style={{ ...thS, textAlign: "right" }}>Meta Aporte</th>
+                <th style={{ ...thS, textAlign: "right" }}>Realizado</th>
+                <th style={{ ...thS, textAlign: "right" }}>Meta Rent.%</th>
+                <th style={{ ...thS, textAlign: "right" }}>Rent. Real%</th>
+                <th style={{ ...thS, textAlign: "center", borderRight: "none" }}>Status</th>
               </tr>
             </thead>
             <tbody>
-              {/* Separador: Passado */}
-              <tr style={{ background: "rgba(34,197,94,0.1)" }}>
-                <td colSpan="5" style={{ padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#22c55e" }}>
-                  ✓ PASSADO - Últimos 12 Meses
-                </td>
-              </tr>
+              {linhas.flatMap((linha) => {
+                const isEditing = editandoMes === linha.mesAnoKey;
+                const rowBg = isEditing
+                  ? "rgba(240,162,2,0.08)"
+                  : linha.isAtual
+                  ? "rgba(240,162,2,0.05)"
+                  : "transparent";
 
-              {dadosMeses.slice(0, 12).map((d, i) => (
-                <tr key={i} style={{ borderBottom: `0.5px solid ${T.border}` }}>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary }}>Mês {d.mesNum}</td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary, textAlign: "right" }}>
-                    {brl(aporte * 100)}
-                  </td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary, textAlign: "right" }}>
-                    {d.temDados ? brl(d.aporteRealizado) : "—"}
-                  </td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary, textAlign: "right" }}>
-                    {brl(d.patrimonioEsperado)}
-                  </td>
-                  <td style={{ padding: "10px 14px", textAlign: "center", fontSize: 12 }}>
-                    {!d.temDados && <span style={{ color: T.textMuted }}>—</span>}
-                    {d.temDados && d.atingiu && <span style={{ color: "#22c55e", fontWeight: 600 }}>✓ OK</span>}
-                    {d.temDados && !d.atingiu && <span style={{ color: "#ef4444", fontWeight: 600 }}>✗ Abaixo</span>}
-                  </td>
-                </tr>
-              ))}
+                const dataRow = (
+                  <tr
+                    key={linha.mesAnoKey}
+                    style={{ borderBottom: `0.5px solid ${T.border}`, background: rowBg, cursor: !linha.isFuturo ? "pointer" : "default", transition: "background 0.15s" }}
+                    onClick={() => {
+                      if (linha.isFuturo) return;
+                      if (isEditing) { setEditandoMes(null); return; }
+                      setEditandoMes(linha.mesAnoKey);
+                      setFormEditMes({
+                        valorCarteira: linha.valorCarteira != null ? String(Math.round(linha.valorCarteira)) : "",
+                        aporteRealizado: linha.aporteRealizado != null ? String(Math.round(linha.aporteRealizado)) : "",
+                        rentabilidadeCarteira: linha.rentReal != null ? String(linha.rentReal) : "",
+                      });
+                    }}
+                  >
+                    <td style={tdS}>
+                      <span style={{ color: linha.isAtual ? T.gold : linha.isFuturo ? T.textMuted : T.textPrimary, fontWeight: linha.isAtual ? 500 : 400 }}>
+                        {linha.mesLabel}{linha.isAtual && " ●"}
+                      </span>
+                    </td>
+                    <td style={{ ...tdS, textAlign: "right", color: T.textSecondary }}>
+                      {brl(linha.patrimonioAlvo)}
+                    </td>
+                    <td style={{ ...tdS, textAlign: "right" }}>
+                      {linha.valorCarteira != null
+                        ? <span style={{ color: linha.valorCarteira >= linha.patrimonioAlvo ? "#22c55e" : T.textPrimary }}>{brl(linha.valorCarteira)}</span>
+                        : <span style={{ color: T.textMuted }}>—</span>
+                      }
+                    </td>
+                    <td style={{ ...tdS, textAlign: "right", color: T.textSecondary }}>{brl(aporte)}</td>
+                    <td style={{ ...tdS, textAlign: "right" }}>
+                      {linha.aporteRealizado != null
+                        ? <span style={{ color: linha.aporteRealizado >= aporte ? "#22c55e" : "#ef4444" }}>{brl(linha.aporteRealizado)}</span>
+                        : <span style={{ color: T.textMuted }}>—</span>
+                      }
+                    </td>
+                    <td style={{ ...tdS, textAlign: "right", color: T.textSecondary }}>{metaRentPct.toFixed(2)}%</td>
+                    <td style={{ ...tdS, textAlign: "right" }}>
+                      {linha.rentReal != null
+                        ? <span style={{ color: linha.rentReal >= metaRentPct ? "#22c55e" : "#ef4444" }}>{linha.rentReal.toFixed(2)}%</span>
+                        : <span style={{ color: T.textMuted }}>—</span>
+                      }
+                    </td>
+                    <td style={{ ...tdS, textAlign: "center", borderRight: "none" }}>
+                      {linha.isFuturo
+                        ? <span style={{ color: T.textMuted, fontSize: 10 }}>—</span>
+                        : <PillStatus s={linha.statusMes} />
+                      }
+                    </td>
+                  </tr>
+                );
 
-              {/* Separador: Futuro */}
-              <tr style={{ background: "rgba(100,150,200,0.1)" }}>
-                <td colSpan="5" style={{ padding: "8px 14px", fontSize: 11, fontWeight: 600, color: "#60a5fa" }}>
-                  📈 FUTURO - Próximos 12 Meses (Projeção)
-                </td>
-              </tr>
+                if (!isEditing) return [dataRow];
 
-              {dadosMeses.slice(12, 24).map((d, i) => (
-                <tr key={i + 12} style={{ borderBottom: `0.5px solid ${T.border}`, opacity: 0.8 }}>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary }}>
-                    <span style={{ fontSize: 11, color: T.textMuted }}>Ano 2 -</span> Mês {d.mesNum}
-                  </td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary, textAlign: "right" }}>
-                    {brl(aporte * 100)}
-                  </td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textMuted, textAlign: "right", fontStyle: "italic" }}>
-                    Projeção
-                  </td>
-                  <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary, textAlign: "right" }}>
-                    {brl(d.patrimonioEsperado)}
-                  </td>
-                  <td style={{ padding: "10px 14px", textAlign: "center", fontSize: 12 }}>
-                    <span style={{ color: "#60a5fa", fontSize: 11 }}>→ Meta</span>
-                  </td>
-                </tr>
-              ))}
+                const editRow = (
+                  <tr key={linha.mesAnoKey + "_edit"} style={{ borderBottom: `0.5px solid ${T.border}`, background: "rgba(240,162,2,0.04)" }}>
+                    <td colSpan={8} style={{ padding: "14px 16px" }}>
+                      <div style={{ fontSize: 11, color: T.gold, marginBottom: 10, fontWeight: 500 }}>
+                        Registrar dados de {linha.mesLabel}
+                      </div>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 4 }}>Valor da Carteira (R$)</div>
+                          <input
+                            type="text" inputMode="numeric" placeholder="0"
+                            value={formEditMes.valorCarteira || ""}
+                            onChange={e => setFormEditMes(f => ({ ...f, valorCarteira: e.target.value.replace(/\D/g, "") }))}
+                            onClick={e => e.stopPropagation()}
+                            style={{ ...C.input, width: 140, padding: "7px 10px", fontSize: 13 }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 4 }}>Aporte Realizado (R$)</div>
+                          <input
+                            type="text" inputMode="numeric" placeholder="0"
+                            value={formEditMes.aporteRealizado || ""}
+                            onChange={e => setFormEditMes(f => ({ ...f, aporteRealizado: e.target.value.replace(/\D/g, "") }))}
+                            onClick={e => e.stopPropagation()}
+                            style={{ ...C.input, width: 140, padding: "7px 10px", fontSize: 13 }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 4 }}>Rentabilidade Real (%)</div>
+                          <input
+                            type="text" inputMode="decimal" placeholder={metaRentPct.toFixed(2)}
+                            value={formEditMes.rentabilidadeCarteira || ""}
+                            onChange={e => setFormEditMes(f => ({ ...f, rentabilidadeCarteira: e.target.value.replace(/[^\d.,]/g, "").replace(",", ".") }))}
+                            onClick={e => e.stopPropagation()}
+                            style={{ ...C.input, width: 120, padding: "7px 10px", fontSize: 13 }}
+                          />
+                        </div>
+                        <button
+                          disabled={salvandoMes}
+                          onClick={e => {
+                            e.stopPropagation();
+                            salvarMesHistorico(linha.mesAnoKey, {
+                              valorCarteira: parseFloat(formEditMes.valorCarteira || "0"),
+                              aporteRealizado: parseFloat(formEditMes.aporteRealizado || "0"),
+                              rentabilidadeCarteira: parseFloat((formEditMes.rentabilidadeCarteira || "0").replace(",", ".")),
+                            });
+                          }}
+                          style={{ padding: "8px 20px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusMd, color: T.gold, fontSize: 12, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+                        >
+                          {salvandoMes ? "Salvando..." : "Salvar"}
+                        </button>
+                        <button
+                          onClick={e => { e.stopPropagation(); setEditandoMes(null); }}
+                          style={{ padding: "8px 14px", background: "none", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, color: T.textMuted, fontSize: 12, cursor: "pointer", fontFamily: T.fontFamily }}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+
+                return [dataRow, editRow];
+              })}
             </tbody>
           </table>
         </div>
 
-        <div style={{
-          marginTop: 16,
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12
-        }}>
-          <div style={{
-            padding: "12px 14px",
-            background: "rgba(34,197,94,0.1)",
-            border: "0.5px solid rgba(34,197,94,0.3)",
-            borderRadius: T.radiusMd,
-            fontSize: 12,
-            color: "#22c55e"
-          }}>
-            ✓ <strong>Passado:</strong> Histórico real dos aportes realizados nos últimos 12 meses.
-          </div>
-
-          <div style={{
-            padding: "12px 14px",
-            background: "rgba(100,150,200,0.1)",
-            border: "0.5px solid rgba(100,150,200,0.3)",
-            borderRadius: T.radiusMd,
-            fontSize: 12,
-            color: "#60a5fa"
-          }}>
-            📈 <strong>Futuro:</strong> Projeção dos próximos 12 meses se você continuar com o aporte de R$ {Math.round(aporte).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/mês.
-          </div>
-        </div>
-
-        <div style={{
-          marginTop: 16,
-          padding: "12px 14px",
-          background: "rgba(255,255,255,0.03)",
-          border: `0.5px solid ${T.border}`,
-          borderRadius: T.radiusMd,
-          fontSize: 12,
-          color: T.textSecondary,
-          lineHeight: 1.6
-        }}>
-          💡 <strong>Como ler:</strong> A projeção futura é calculada assumindo que você mantenha o aporte mensal constante. Se conseguir uma rentabilidade maior ou aumentar os aportes, o prazo será reduzido e você chegará ao seu objetivo mais rápido! Cada mês que passa, esses dados são atualizados automaticamente.
+        {/* Legenda */}
+        <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: T.textMuted, lineHeight: 1.8 }}>
+          <span><span style={{ color: "#22c55e" }}>●</span> Meta Batida — aporte e rentabilidade atingidos</span>
+          <span><span style={{ color: "#f59e0b" }}>●</span> Meta Parcial — apenas uma meta atingida</span>
+          <span><span style={{ color: "#ef4444" }}>●</span> Não Bateu — nenhuma meta atingida</span>
+          <span><span style={{ color: T.gold }}>●</span> Mês atual</span>
         </div>
       </div>
     );
