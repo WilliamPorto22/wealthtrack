@@ -432,7 +432,7 @@ export default function ClienteFicha() {
       setSnap({...data});
       setUltimaRevisao(data.lastReviewDate||data.ultimaRevisao||null);
       if(data.fluxo){
-        const cats=["moradia","alimentacao","educacao","cartoes","carro","saude","outros"];
+        const cats=["moradia","alimentacao","educacao","cartoes","carro","saude","lazer","assinaturas","seguros","outros"];
         const total=cats.reduce((acc,k)=>acc+(parseCentavos(data.fluxo[k])/100),0);
         setGastosSync(total);
       }

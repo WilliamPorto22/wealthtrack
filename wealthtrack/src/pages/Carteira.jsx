@@ -3,8 +3,8 @@ import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
-import Tesseract from "tesseract.js";
 import { T, C } from "../theme";
+import { extractText, parseCarteiraFromText } from "../utils/documentParser";
 import { AvatarIcon } from "./Dashboard";
 
 // ── Utilitários ───────────────────────────────────────────────
@@ -170,7 +170,7 @@ export default function Carteira(){
   const [salvando,setSalvando]=useState(false);
   const [msg,setMsg]=useState("");
   const [alertaRemocao,setAlertaRemocao]=useState(null);
-  const [uploading,setUploading]=useState(false);
+  const [uploadProgress,setUploadProgress]=useState(null);
   const [carregou,setCarregou]=useState(false);
   const [expandedRow,setExpandedRow]=useState(null);
   const fileInputRef=useRef(null);
@@ -182,7 +182,7 @@ export default function Carteira(){
       const data=s.data();
       setClienteNome(data.nome||"");
       setClienteAvatar(data.avatar||"homem");
-      const cats=["moradia","alimentacao","educacao","cartoes","carro","saude","outros"];
+      const cats=["moradia","alimentacao","educacao","cartoes","carro","saude","lazer","assinaturas","seguros","outros"];
       const gastosFluxo=cats.reduce((acc,k)=>acc+(parseCentavos(data.fluxo?.[k])/100),0);
       const gastosManual=parseCentavos(data.gastosMensaisManual)/100;
       const gastos=gastosManual||gastosFluxo;
@@ -273,53 +273,27 @@ export default function Carteira(){
     setSalvando(false);
   }
 
-  // ── OCR ───────────────────────────────────────────────────────
-  function extrairValor(texto){
-    const match=texto?.match(/[\d.,]+/);
-    if(!match) return 0;
-    return Math.round(parseFloat(match[0].replace(/\./g,"").replace(",","."))*100)||0;
-  }
-  function parseFinancialData(texto){
-    const resultado={};
-    const patterns={
-      posFixado:["PÓS-FIXADO","PÓS FIXADO","SELIC","CDB","LCI","LCA"],
-      ipca:["IPCA","IPCA+","NTN-B","TESOURO IPCA"],
-      preFixado:["PRÉ-FIXADO","PRÉ FIXADO","TESOURO PREFIXADO"],
-      fiis:["FII","FUNDO IMOBILIÁRIO","IMOBILIÁRIOS"],
-      multi:["MULTIMERCADO","HEDGE FUND"],
-      acoes:["AÇÃO","AÇÕES","ETF","RENDA VARIÁVEL"],
-      globalEquities:["EQUITIES","EQUITY"],
-      globalTreasury:["TREASURY","TESOURO AMERICANO"],
-      globalFunds:["MUTUAL FUND","FUNDO GLOBAL"],
-      globalBonds:["BONDS","BOND","RENDA FIXA GLOBAL"],
-      global:["GLOBAL","INTERNACIONAL","BDR","EXTERIOR"],
-    };
-    Object.entries(patterns).forEach(([campo,palavras])=>{
-      palavras.forEach(palavra=>{
-        const match=texto.match(new RegExp(`${palavra}[^\\d]*([\\d.,]+)`,"i"));
-        if(match?.[1]){const v=extrairValor(match[1]);if(v>0)resultado[campo]=v;}
-      });
-    });
-    return resultado;
-  }
+  // ── Importar arquivo (PDF ou imagem) ─────────────────────────
   async function handleUpload(e){
-    const file=e.target.files[0]; if(!file) return;
-    setUploading(true); setMsg("Lendo arquivo com OCR...");
+    const file=e.target.files?.[0]; if(!file) return;
+    const setP=(pct,message,extra={})=>setUploadProgress({pct,message,...extra});
+    setP(0,"Iniciando leitura do arquivo...");
     try{
-      if(!file.type.startsWith("image/")) throw new Error("Use imagem (JPG, PNG)");
-      const result=await Tesseract.recognize(file,["por","eng"],{
-        logger:(m)=>{if(m.status==="recognizing")setMsg(`OCR... ${Math.round(m.progress*100)}%`);}
-      });
-      const dados=parseFinancialData(result.data.text);
+      const text=await extractText(file,(pct,message)=>setP(pct,message));
+      const dados=parseCarteiraFromText(text);
       if(Object.keys(dados).length===0){
-        setMsg("Nenhum dado detectado. Preencha manualmente."); setModo("editar");
+        setP(100,"Nenhum dado reconhecido.",{error:true,errorDetail:"O arquivo não contém dados financeiros legíveis. Tente outro arquivo ou preencha manualmente."});
+        setModo("editar");
       }else{
-        Object.entries(dados).forEach(([k,v])=>{formRef.current={...formRef.current,[k]:String(v)};});
-        setSnap(p=>({...p,...Object.fromEntries(Object.entries(dados).map(([k,v])=>[k,String(v)]))}));
-        setMsg(`✓ ${Object.keys(dados).length} campos atualizados. Revise e salve.`); setModo("editar");
+        Object.entries(dados).forEach(([k,v])=>{formRef.current={...formRef.current,[k]:v};});
+        setSnap(p=>({...p,...dados}));
+        setP(100,`✓ ${Object.keys(dados).length} campo${Object.keys(dados).length>1?"s":""} preenchido${Object.keys(dados).length>1?"s":""}. Revise e salve.`);
+        setModo("editar");
       }
-    }catch(err){setMsg("Erro: "+err.message);}
-    setUploading(false); e.target.value="";
+    }catch(err){
+      setP(0,"",{error:true,pct:0,message:"Erro ao processar arquivo",errorDetail:err.message});
+    }
+    e.target.value="";
   }
 
   // ── Cálculos ──────────────────────────────────────────────────
@@ -355,12 +329,42 @@ export default function Carteira(){
     <div className="carteira-container">
       <Navbar
         actionButtons={[
-          {icon:uploading?"⟳":"↑",label:uploading?"Processando...":"Importar",onClick:()=>fileInputRef.current?.click(),disabled:uploading},
+          {icon:"↑",label:"Importar PDF/Img",onClick:()=>fileInputRef.current?.click(),disabled:!!uploadProgress&&!uploadProgress.error&&uploadProgress.pct<100},
           {label:modo==="ver"?"Editar":"Salvar",variant:modo==="editar"?"primary":"secondary",onClick:modo==="ver"?()=>setModo("editar"):salvar,disabled:salvando},
           ...(modo==="editar"?[{label:"Cancelar",variant:"secondary",onClick:()=>{formRef.current={...snap};setModo("ver");}}]:[]),
         ]}
       />
-      <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg" style={{display:"none"}} onChange={handleUpload}/>
+      <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{display:"none"}} onChange={handleUpload}/>
+
+      {/* Overlay de progresso */}
+      {uploadProgress&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:"#111827",border:"0.5px solid rgba(255,255,255,0.1)",borderRadius:18,padding:"28px 24px",width:360,maxWidth:"100%"}}>
+            <div style={{fontSize:15,fontWeight:400,color:uploadProgress.pct>=100&&!uploadProgress.error?"#22c55e":uploadProgress.error?"#ef4444":"#F0EBD8",marginBottom:6,...noEdit}}>
+              {uploadProgress.pct>=100&&!uploadProgress.error?"✓ Importação finalizada":uploadProgress.error?"✗ Erro na importação":"Processando arquivo..."}
+            </div>
+            <div style={{fontSize:12,color:"#748CAB",marginBottom:16,lineHeight:1.6,...noEdit}}>{uploadProgress.message}</div>
+            {!uploadProgress.error&&uploadProgress.pct<100&&(
+              <>
+                <div style={{height:6,background:"rgba(255,255,255,0.08)",borderRadius:3,overflow:"hidden",marginBottom:8}}>
+                  <div style={{height:"100%",width:`${uploadProgress.pct}%`,background:"#F0A202",borderRadius:3,transition:"width 0.4s ease"}}/>
+                </div>
+                <div style={{fontSize:11,color:"#F0A202",textAlign:"right",...noEdit}}>{Math.round(uploadProgress.pct)}%</div>
+              </>
+            )}
+            {uploadProgress.error&&(
+              <div style={{background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.25)",borderRadius:10,padding:"10px 12px",marginBottom:16,...noEdit}}>
+                <div style={{fontSize:11,color:"#ef4444",lineHeight:1.6}}>{uploadProgress.errorDetail}</div>
+              </div>
+            )}
+            {(uploadProgress.pct>=100||uploadProgress.error)&&(
+              <button onClick={()=>setUploadProgress(null)} style={{width:"100%",padding:10,background:"rgba(255,255,255,0.04)",border:"0.5px solid rgba(255,255,255,0.1)",borderRadius:9,color:"#748CAB",fontSize:12,cursor:"pointer",fontFamily:font}}>
+                Fechar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="carteira-content">
         {/* Voltar */}

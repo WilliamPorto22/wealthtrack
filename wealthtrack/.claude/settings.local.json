@@ -20,7 +20,8 @@
       "Read(//c/Users/User/wealthtrack/functions/**)",
       "Bash(npm install:*)",
       "Bash(npx react-scripts *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npm list *)"
     ]
   }
 }
