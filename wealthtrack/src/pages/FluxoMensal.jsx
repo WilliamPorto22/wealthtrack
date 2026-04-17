@@ -134,10 +134,11 @@ export default function FluxoMensal() {
   const navigate = useNavigate();
   const [form, setForm] = useState({});
   const [clienteNome, setClienteNome] = useState("");
-  const [rendaExterna, setRendaExterna] = useState(0); // salarioMensal do perfil
+  const [rendaExterna, setRendaExterna] = useState(0);
   const [modo, setModo] = useState("ver");
   const [salvando, setSalvando] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
+  const [expandedCat, setExpandedCat] = useState(null);
   const fileInputRef = useRef(null);
 
   useEffect(()=>{
@@ -183,15 +184,20 @@ export default function FluxoMensal() {
     try{
       const text=await extractText(file,(pct,message)=>setP(pct,message));
       const dados=parseFluxoFromText(text);
-      if(Object.keys(dados).length===0){
+      const catKeys=Object.keys(dados).filter(k=>!k.endsWith("_items"));
+      if(catKeys.length===0){
         setP(100,"Nenhum dado reconhecido. Verifique o arquivo ou preencha manualmente.",{error:true,errorDetail:"O arquivo não contém dados financeiros legíveis no formato esperado. Tente outro arquivo ou preencha manualmente os campos abaixo."});
         setModo("editar");
       } else {
         const novoForm={...form};
         Object.entries(dados).forEach(([k,v])=>{ novoForm[k]=v; });
         setForm(novoForm);
-        setP(100,`✓ ${Object.keys(dados).length} campo${Object.keys(dados).length>1?"s":""} preenchido${Object.keys(dados).length>1?"s":""}. Revise e salve.`);
-        setModo("editar");
+        const temItems=Object.keys(dados).some(k=>k.endsWith("_items"));
+        const msg=temItems
+          ?`✓ ${catKeys.length} categori${catKeys.length>1?"as":"a"} com transações individuais importadas. Revise e salve.`
+          :`✓ ${catKeys.length} campo${catKeys.length>1?"s":""} preenchido${catKeys.length>1?"s":""}. Revise e salve.`;
+        setP(100,msg);
+        setModo("ver");
       }
     } catch(err){
       setP(0,"",{error:true,pct:0,message:"Erro ao processar arquivo",errorDetail:err.message});
@@ -343,30 +349,62 @@ export default function FluxoMensal() {
 
               if(modo==="ver"&&!hasVal) return null;
 
+              const items=form[key+"_items"]||[];
+              const isExpanded=expandedCat===key;
+
               return(
                 <div key={key} style={{
                   background:hasVal?`rgba(${hexRgb(cor)},0.04)`:"rgba(255,255,255,0.01)",
                   border:`0.5px solid ${hasVal?`rgba(${hexRgb(cor)},0.2)`:"rgba(255,255,255,0.05)"}`,
                   borderRadius:10,padding:"12px 14px",
+                  cursor:modo==="ver"&&items.length>0?"pointer":"default",
                 }}>
                   {modo==="ver"?(
-                    <div style={{...noEdit}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                    <div onClick={()=>items.length>0&&setExpandedCat(isExpanded?null:key)}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,...noEdit}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
                           <div style={{width:3,height:28,borderRadius:2,background:cor,flexShrink:0}}/>
                           <div>
                             <div style={{fontSize:13,color:T.textPrimary}}>{label}</div>
-                            <div style={{fontSize:9,color:"#748CAB",marginTop:1}}>{desc}</div>
+                            <div style={{fontSize:9,color:"#748CAB",marginTop:1}}>
+                              {items.length>0?`${items.length} transaç${items.length>1?"ões":"ão"} · clique para ver`:desc}
+                            </div>
                           </div>
                         </div>
-                        <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:14,color:cor,fontWeight:300}}>{fmtFull(val)}</div>
-                          <div style={{fontSize:9,color:"#748CAB",marginTop:1}}>{pct}% dos gastos</div>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontSize:14,color:cor,fontWeight:300}}>{fmtFull(val)}</div>
+                            <div style={{fontSize:9,color:"#748CAB",marginTop:1}}>{pct}% dos gastos</div>
+                          </div>
+                          {items.length>0&&(
+                            <div style={{fontSize:14,color:"#748CAB",transform:isExpanded?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.2s",...noEdit}}>▾</div>
+                          )}
                         </div>
                       </div>
                       {pct>0&&(
                         <div style={{height:3,background:"rgba(255,255,255,0.06)",borderRadius:2,overflow:"hidden"}}>
                           <div style={{height:"100%",width:`${pct}%`,background:cor,borderRadius:2}}/>
+                        </div>
+                      )}
+                      {/* Lista de transações expandida */}
+                      {isExpanded&&items.length>0&&(
+                        <div style={{marginTop:10,borderTop:`0.5px solid rgba(${hexRgb(cor)},0.15)`,paddingTop:10}}>
+                          <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8,...noEdit}}>
+                            Transações importadas
+                          </div>
+                          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                            {items.map((it,idx)=>(
+                              <div key={idx} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",background:"rgba(255,255,255,0.02)",borderRadius:6,...noEdit}}>
+                                <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                                  <span style={{fontSize:9,color:"#748CAB",flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{it.data}</span>
+                                  <span style={{fontSize:11,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.nome}</span>
+                                </div>
+                                <span style={{fontSize:11,color:cor,fontWeight:500,flexShrink:0,marginLeft:8}}>
+                                  {fmtFull(it.valor/100)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

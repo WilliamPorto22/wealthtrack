@@ -21,7 +21,11 @@
       "Bash(npm install:*)",
       "Bash(npx react-scripts *)",
       "Bash(npx vite *)",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "Bash(node -e ' *)",
+      "Bash(node --experimental-vm-modules --input-type=module)",
+      "Bash(python -c ' *)",
+      "Bash(pip install *)"
     ]
   }
 }

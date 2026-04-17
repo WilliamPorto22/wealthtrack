@@ -171,6 +171,7 @@ export default function Carteira(){
   const [msg,setMsg]=useState("");
   const [alertaRemocao,setAlertaRemocao]=useState(null);
   const [uploadProgress,setUploadProgress]=useState(null);
+  const [xpSummary,setXpSummary]=useState(null);
   const [carregou,setCarregou]=useState(false);
   const [expandedRow,setExpandedRow]=useState(null);
   const fileInputRef=useRef(null);
@@ -281,13 +282,24 @@ export default function Carteira(){
     try{
       const text=await extractText(file,(pct,message)=>setP(pct,message));
       const dados=parseCarteiraFromText(text);
-      if(Object.keys(dados).length===0){
+      // Separar campos internos (_tipo, _patrimonioTotal, etc.) dos campos da carteira
+      const metaFields=Object.fromEntries(Object.entries(dados).filter(([k])=>k.startsWith("_")));
+      const carteiraFields=Object.fromEntries(Object.entries(dados).filter(([k])=>!k.startsWith("_")));
+      const camposPreenchidos=Object.keys(carteiraFields).length;
+
+      if(camposPreenchidos===0){
         setP(100,"Nenhum dado reconhecido.",{error:true,errorDetail:"O arquivo não contém dados financeiros legíveis. Tente outro arquivo ou preencha manualmente."});
         setModo("editar");
       }else{
-        Object.entries(dados).forEach(([k,v])=>{formRef.current={...formRef.current,[k]:v};});
-        setSnap(p=>({...p,...dados}));
-        setP(100,`✓ ${Object.keys(dados).length} campo${Object.keys(dados).length>1?"s":""} preenchido${Object.keys(dados).length>1?"s":""}. Revise e salve.`);
+        Object.entries(carteiraFields).forEach(([k,v])=>{formRef.current={...formRef.current,[k]:v};});
+        setSnap(p=>({...p,...carteiraFields}));
+
+        if(metaFields._tipo==="relatorio"){
+          setXpSummary(metaFields);
+          setP(100,`✓ Relatório XPerformance: ${camposPreenchidos} classe${camposPreenchidos>1?"s":""} importada${camposPreenchidos>1?"s":""}. Revise e salve.`);
+        }else{
+          setP(100,`✓ ${camposPreenchidos} campo${camposPreenchidos>1?"s":""} preenchido${camposPreenchidos>1?"s":""}. Revise e salve.`);
+        }
         setModo("editar");
       }
     }catch(err){
@@ -335,6 +347,54 @@ export default function Carteira(){
         ]}
       />
       <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{display:"none"}} onChange={handleUpload}/>
+
+      {/* Modal resumo relatório de investimentos */}
+      {xpSummary&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",zIndex:610,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:"#111827",border:"0.5px solid rgba(240,162,2,0.25)",borderRadius:18,padding:"24px 22px",width:380,maxWidth:"100%"}}>
+            <div style={{fontSize:10,color:"#F0A202",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:4,...noEdit}}>Relatório importado</div>
+            <div style={{fontSize:16,fontWeight:300,color:"#F0EBD8",marginBottom:16,...noEdit}}>Carteira de Investimentos</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+              {xpSummary._patrimonioTotal>0&&(
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(240,162,2,0.06)",border:"0.5px solid rgba(240,162,2,0.18)",borderRadius:8,...noEdit}}>
+                  <span style={{fontSize:11,color:"#748CAB"}}>Patrimônio Total Bruto</span>
+                  <span style={{fontSize:12,color:"#F0A202",fontWeight:500}}>{brl(xpSummary._patrimonioTotal/100)}</span>
+                </div>
+              )}
+              {xpSummary._rentMes&&(
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(34,197,94,0.06)",border:"0.5px solid rgba(34,197,94,0.18)",borderRadius:8,...noEdit}}>
+                  <span style={{fontSize:11,color:"#748CAB"}}>Rentabilidade no Mês</span>
+                  <span style={{fontSize:12,color:"#22c55e",fontWeight:500}}>{xpSummary._rentMes}%</span>
+                </div>
+              )}
+              {xpSummary._ganhoMes>0&&(
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(34,197,94,0.04)",border:"0.5px solid rgba(34,197,94,0.12)",borderRadius:8,...noEdit}}>
+                  <span style={{fontSize:11,color:"#748CAB"}}>Ganho no Mês</span>
+                  <span style={{fontSize:12,color:"#4ade80"}}>{brl(xpSummary._ganhoMes/100)}</span>
+                </div>
+              )}
+              {xpSummary._rendimentosPassivos>0&&(
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(96,165,250,0.05)",border:"0.5px solid rgba(96,165,250,0.15)",borderRadius:8,...noEdit}}>
+                  <span style={{fontSize:11,color:"#748CAB"}}>Renda Passiva (dividendos/juros)</span>
+                  <span style={{fontSize:12,color:"#60a5fa"}}>{brl(xpSummary._rendimentosPassivos/100)}</span>
+                </div>
+              )}
+              {xpSummary._aportes>0&&(
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 12px",background:"rgba(168,85,247,0.05)",border:"0.5px solid rgba(168,85,247,0.15)",borderRadius:8,...noEdit}}>
+                  <span style={{fontSize:11,color:"#748CAB"}}>Aportes recebidos</span>
+                  <span style={{fontSize:12,color:"#a855f7"}}>{brl(xpSummary._aportes/100)}</span>
+                </div>
+              )}
+            </div>
+            <div style={{fontSize:10,color:"#748CAB",marginBottom:14,lineHeight:1.6,...noEdit}}>
+              As alocações por classe foram preenchidas automaticamente. Revise os valores e adicione os ativos individuais no modo de edição.
+            </div>
+            <button onClick={()=>setXpSummary(null)} style={{width:"100%",padding:10,background:"rgba(240,162,2,0.08)",border:"0.5px solid rgba(240,162,2,0.3)",borderRadius:9,color:"#F0A202",fontSize:12,cursor:"pointer",fontFamily:font}}>
+              Entendido — revisar carteira
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Overlay de progresso */}
       {uploadProgress&&(
