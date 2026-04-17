@@ -398,6 +398,8 @@ export default function ClienteFicha() {
   const [gastosSync,setGastosSync] = useState(0);
   const [ultimaRevisao,setUltimaRevisao] = useState(null);
   const [marcandoRevisao,setMarcandoRevisao] = useState(false);
+  const [modalRevisao,setModalRevisao] = useState(false);
+  const [dataRevisaoInput,setDataRevisaoInput] = useState("");
   const [salvando,setSalvando] = useState(false);
   const [msg,setMsg] = useState("");
   const [carregou,setCarregou] = useState(false);
@@ -499,6 +501,23 @@ export default function ClienteFicha() {
     }catch{return true;}
   }
   const pendente = id!=="novo"&&revisaoPendente();
+  const revisaoFeitaMes = (()=>{
+    if(!ultimaRevisao) return false;
+    try{
+      const r=ultimaRevisao.toDate?ultimaRevisao.toDate():new Date(ultimaRevisao);
+      return r.getMonth()===hoje.getMonth()&&r.getFullYear()===hoje.getFullYear();
+    }catch{return false;}
+  })();
+
+  const liquidezReserva = parseCentavos(snap.carteira?.liquidezD1)/100||parseCentavos(snap.carteira?.posFixado)/100;
+  const reservaStatus = reservaMeta>0&&liquidezReserva>=reservaMeta
+    ? {label:"✓ Reserva OK",cor:"#22c55e",bg:"rgba(34,197,94,0.1)",border:"0.5px solid rgba(34,197,94,0.3)",labelCor:"#86efac"}
+    : reservaMeta>0&&liquidezReserva>=reservaMeta*0.6
+    ? {label:"⚡ Em construção",cor:"#f59e0b",bg:"rgba(245,158,11,0.1)",border:"0.5px solid rgba(245,158,11,0.3)",labelCor:"#fcd34d"}
+    : reservaMeta>0&&liquidezReserva>0
+    ? {label:"⚠ Fortalecer",cor:"#ef4444",bg:"rgba(239,68,68,0.1)",border:"0.5px solid rgba(239,68,68,0.3)",labelCor:"#fca5a5"}
+    : {label:"— Sem dados",cor:"#a855f7",bg:"rgba(168,85,247,0.07)",border:"0.5px solid rgba(168,85,247,0.2)",labelCor:"#c4b5fd"};
+
   const idade = calcularIdade(snap.nascimento);
 
   // ── Handlers ─────────────────────────────────────────────────
@@ -566,12 +585,20 @@ export default function ClienteFicha() {
     setModo("ver");
   }
 
-  async function marcarRevisao(){
+  async function marcarRevisao(dateStr){
     setMarcandoRevisao(true);
     try{
+      let reviewDate;
+      let reviewDateForState;
+      if(dateStr){
+        const [d,m,y]=dateStr.split("/");
+        const dt=new Date(parseInt(y),parseInt(m)-1,parseInt(d));
+        if(!isNaN(dt)){reviewDate=dt;reviewDateForState={toDate:()=>dt};}
+      }
+      if(!reviewDate){reviewDate=new Date();reviewDateForState={toDate:()=>new Date()};}
       const s=await getDoc(doc(db,"clientes",id));
-      await setDoc(doc(db,"clientes",id),{...s.data(),lastReviewDate:serverTimestamp()});
-      setUltimaRevisao({toDate:()=>new Date()});
+      await setDoc(doc(db,"clientes",id),{...s.data(),lastReviewDate:reviewDate});
+      setUltimaRevisao(reviewDateForState);
       setMsg("Revisão marcada.");
     }catch{setMsg("Erro ao marcar revisão.");}
     setMarcandoRevisao(false);
@@ -666,6 +693,32 @@ export default function ClienteFicha() {
         </div>
       )}
 
+      {/* MODAL: Marcar revisão */}
+      {modalRevisao&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:18,padding:"28px 24px",width:320,maxWidth:"100%"}}>
+            <div style={{fontSize:16,fontWeight:300,color:T.textPrimary,marginBottom:4,...noEdit}}>Marcar revisão</div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:20,...noEdit}}>Confirme a data da revisão realizada</div>
+            <input style={{...C.input,marginBottom:16}} type="date"
+              value={dataRevisaoInput}
+              onChange={e=>setDataRevisaoInput(e.target.value)}
+            />
+            <div style={{display:"flex",gap:10}}>
+              <button style={{flex:1,padding:11,background:"none",border:`0.5px solid ${T.border}`,borderRadius:9,color:T.textMuted,fontSize:11,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>setModalRevisao(false)}>Cancelar</button>
+              <button style={{flex:1,padding:11,background:"rgba(240,162,2,0.1)",border:"0.5px solid rgba(240,162,2,0.4)",borderRadius:9,color:"#F0A202",fontSize:11,cursor:"pointer",fontFamily:"inherit"}} onClick={()=>{
+                if(dataRevisaoInput){
+                  const[a,m,d]=dataRevisaoInput.split("-");
+                  marcarRevisao(`${d}/${m}/${a}`);
+                }else{
+                  marcarRevisao(null);
+                }
+                setModalRevisao(false);
+              }}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Botão ← fixo lateral esquerda — mesmo estilo de Objetivos */}
       <button
         onClick={()=>navigate("/dashboard")}
@@ -730,15 +783,22 @@ export default function ClienteFicha() {
 
           {/* Botões de ação */}
           {id!=="novo"&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:18}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
               {/* Marcar revisão */}
-              <button
-                onClick={marcarRevisao}
-                disabled={marcandoRevisao}
-                style={{padding:"12px 10px",background:"rgba(240,162,2,0.07)",border:"0.5px solid rgba(240,162,2,0.28)",borderRadius:10,color:"#F0A202",fontSize:12,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.04em",textAlign:"center",fontWeight:500,...noEdit}}
-              >
-                {marcandoRevisao?"Salvando...":"Marcar revisão"}
-              </button>
+              {revisaoFeitaMes?(
+                <div style={{padding:"8px 10px",background:"rgba(34,197,94,0.08)",border:"0.5px solid rgba(34,197,94,0.35)",borderRadius:9,textAlign:"center",...noEdit}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#22c55e",marginBottom:1}}>✓ Revisão mensal feita</div>
+                  {dataRevisao&&<div style={{fontSize:9,color:"#86efac",opacity:0.8}}>{dataRevisao}</div>}
+                </div>
+              ):(
+                <button
+                  onClick={()=>{setDataRevisaoInput(hoje.toISOString().split("T")[0]);setModalRevisao(true);}}
+                  disabled={marcandoRevisao}
+                  style={{padding:"8px 10px",background:"rgba(240,162,2,0.07)",border:"0.5px solid rgba(240,162,2,0.28)",borderRadius:9,color:"#F0A202",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.03em",textAlign:"center",fontWeight:500,...noEdit}}
+                >
+                  {marcandoRevisao?"Salvando...":"Marcar revisão"}
+                </button>
+              )}
 
               {/* Status de aporte do mês — inteligente */}
               {(()=>{
@@ -751,19 +811,19 @@ export default function ClienteFicha() {
                 let corBg, corBorder, corTexto, linha1, linha2;
                 if(bateuMeta){
                   corBg="rgba(34,197,94,0.12)"; corBorder="rgba(34,197,94,0.45)"; corTexto="#22c55e";
-                  linha1="✓ Meta batida!";
+                  linha1="✓ Aporte Mês Feito";
                   linha2=moedaFull(aporteRegistradoVal);
                 } else if(abaixoMeta){
                   corBg="rgba(245,158,11,0.09)"; corBorder="rgba(245,158,11,0.4)"; corTexto="#f59e0b";
-                  linha1="✓ Abaixo da meta";
+                  linha1="Aporte Feito Parcial";
                   linha2=`${moedaFull(aporteRegistradoVal)} / ${moedaFull(metaReais)}`;
                 } else if(aportou){
                   corBg="rgba(34,197,94,0.08)"; corBorder="rgba(34,197,94,0.3)"; corTexto="#22c55e";
-                  linha1="✓ Aporte feito";
+                  linha1="✓ Aporte Mês Feito";
                   linha2=aporteRegistradoVal>0?moedaFull(aporteRegistradoVal):"";
                 } else if(semAporte){
                   corBg="rgba(239,68,68,0.08)"; corBorder="rgba(239,68,68,0.3)"; corTexto="#ef4444";
-                  linha1="✗ Sem aporte"; linha2="este mês";
+                  linha1="✗ Não fez aporte"; linha2="no mês";
                 } else {
                   corBg="rgba(255,255,255,0.03)"; corBorder="rgba(255,255,255,0.08)"; corTexto=T.textMuted;
                   linha1="Aporte pendente"; linha2="";
@@ -771,38 +831,62 @@ export default function ClienteFicha() {
                 return (
                   <button
                     onClick={()=>toggleSection("aportes")}
-                    style={{padding:"12px 10px",background:corBg,border:`0.5px solid ${corBorder}`,borderRadius:10,color:corTexto,fontSize:12,cursor:"pointer",fontFamily:"inherit",textAlign:"center",lineHeight:1.5,...noEdit}}
+                    style={{padding:"8px 10px",background:corBg,border:`0.5px solid ${corBorder}`,borderRadius:9,color:corTexto,fontSize:11,cursor:"pointer",fontFamily:"inherit",textAlign:"center",lineHeight:1.4,...noEdit}}
                   >
-                    <div style={{fontWeight:500}}>{linha1}</div>
-                    {linha2&&<div style={{fontSize:11,opacity:0.75,marginTop:2}}>{linha2}</div>}
+                    <div style={{fontWeight:600,fontSize:11}}>{linha1}</div>
+                    {linha2&&<div style={{fontSize:9,opacity:0.75,marginTop:1}}>{linha2}</div>}
                   </button>
                 );
               })()}
             </div>
           )}
 
-          {/* KPI strip — 3 caixinhas */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-            {/* Patrimônio Total — valor completo */}
-            <div style={{background:"rgba(34,197,94,0.07)",border:"0.5px solid rgba(34,197,94,0.2)",borderRadius:12,padding:"12px 10px",textAlign:"center",...noEdit}}>
-              <div style={{fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6,fontWeight:500}}>Patrimônio Total</div>
-              <div style={{fontSize:13,fontWeight:400,color:"#22c55e",lineHeight:1.4,wordBreak:"break-all"}}>
-                {moedaFull(patrimonioDisplay)}
+          {/* KPI strip — grade 2×2 */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {/* Patrimônio Total */}
+            <div style={{background:"rgba(34,197,94,0.06)",border:"0.5px solid rgba(34,197,94,0.18)",borderRadius:10,padding:"10px 12px",...noEdit}}>
+              <div style={{fontSize:8,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Patrimônio Total</div>
+              <div style={{fontSize:13,fontWeight:400,color:"#22c55e",lineHeight:1.3,wordBreak:"break-all"}}>
+                {patrimonioDisplay>0?moedaFull(patrimonioDisplay):"—"}
               </div>
+              {totalCarteira>0&&totalImoveis+totalVeiculos>0&&(
+                <div style={{fontSize:8,color:"#4ade80",marginTop:2,opacity:0.65}}>inclui imóveis e veículos</div>
+              )}
             </div>
-            {/* Renda Mensal — valor completo */}
-            <div style={{background:"rgba(96,165,250,0.07)",border:"0.5px solid rgba(96,165,250,0.2)",borderRadius:12,padding:"12px 10px",textAlign:"center",...noEdit}}>
-              <div style={{fontSize:9,color:"#93c5fd",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6,fontWeight:500}}>Renda Mensal</div>
-              <div style={{fontSize:13,fontWeight:400,color:"#60a5fa",lineHeight:1.4,wordBreak:"break-all"}}>
+            {/* Patrimônio Financeiro */}
+            <div style={{background:"rgba(240,162,2,0.06)",border:"0.5px solid rgba(240,162,2,0.18)",borderRadius:10,padding:"10px 12px",...noEdit}}>
+              <div style={{fontSize:8,color:"#fcd34d",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Patrimônio Financeiro</div>
+              <div style={{fontSize:13,fontWeight:400,color:"#F0A202",lineHeight:1.3,wordBreak:"break-all"}}>
+                {patrimonioFinanceiro>0?moedaFull(patrimonioFinanceiro):"—"}
+              </div>
+              {patrimonioFinanceiro>0&&(
+                <div style={{fontSize:8,color:"#fbbf24",marginTop:2,opacity:0.65}}>somente investimentos</div>
+              )}
+            </div>
+            {/* Renda Mensal */}
+            <div style={{background:"rgba(96,165,250,0.06)",border:"0.5px solid rgba(96,165,250,0.18)",borderRadius:10,padding:"10px 12px",...noEdit}}>
+              <div style={{fontSize:8,color:"#93c5fd",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Renda Mensal</div>
+              <div style={{fontSize:13,fontWeight:400,color:"#60a5fa",lineHeight:1.3,wordBreak:"break-all"}}>
                 {rendaMensal>0?moedaFull(rendaMensal):"—"}
               </div>
+              {gastosMensaisEfetivo>0&&rendaMensal>0&&(
+                <div style={{fontSize:8,color:"#93c5fd",marginTop:2,opacity:0.65}}>gastos: {formatMi(gastosMensaisEfetivo)}/mês</div>
+              )}
             </div>
-            {/* Reserva de Emergência — valor completo */}
-            <div style={{background:"rgba(168,85,247,0.07)",border:"0.5px solid rgba(168,85,247,0.2)",borderRadius:12,padding:"12px 10px",textAlign:"center",...noEdit}}>
-              <div style={{fontSize:9,color:"#c4b5fd",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6,fontWeight:500}}>Reserva Emergência</div>
-              <div style={{fontSize:13,fontWeight:400,color:"#a855f7",lineHeight:1.4,wordBreak:"break-all"}}>
-                {reservaMeta>0?moedaFull(reservaMeta):"—"}
+            {/* Reserva de Emergência com status */}
+            <div style={{background:reservaStatus.bg,border:reservaStatus.border,borderRadius:10,padding:"10px 12px",...noEdit}}>
+              <div style={{fontSize:8,color:reservaStatus.labelCor,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Reserva Emergência</div>
+              <div style={{fontSize:11,fontWeight:600,color:reservaStatus.cor,lineHeight:1.3,marginBottom:2}}>
+                {reservaStatus.label}
               </div>
+              {reservaMeta>0&&(
+                <div style={{fontSize:8,color:reservaStatus.cor,opacity:0.7}}>meta: {formatMi(reservaMeta)}</div>
+              )}
+              {reservaMeta>0&&liquidezReserva>0&&liquidezReserva<reservaMeta&&(
+                <div style={{marginTop:5,height:2,background:"rgba(255,255,255,0.07)",borderRadius:2,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.min(liquidezReserva/reservaMeta*100,100).toFixed(0)}%`,background:reservaStatus.cor,borderRadius:2}}/>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -974,12 +1058,23 @@ export default function ClienteFicha() {
         {modo==="ver"&&id!=="novo"&&(
           <>
             {/* Quick links */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
-              {[["Objetivos","objetivos","🎯"],["Carteira","carteira","📊"],["Fluxo Mensal","fluxo","💸"]].map(([l,r,ic])=>(
-                <div key={l} style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:12,padding:"14px 12px",textAlign:"center",cursor:"pointer",...noEdit}} onClick={()=>navigate(`/cliente/${id}/${r}`)}>
-                  <div style={{fontSize:18,marginBottom:6}}>{ic}</div>
-                  <div style={{fontSize:11,color:T.textPrimary,marginBottom:3}}>{l}</div>
-                  <div style={{fontSize:9,color:"#F0A202",letterSpacing:"0.08em"}}>Abrir →</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+              {[["Objetivos","objetivos","🎯"],["Carteira","carteira","📊"],["Gastos Mensais","fluxo","💸"]].map(([l,r,ic])=>(
+                <div key={l}
+                  onClick={()=>navigate(`/cliente/${id}/${r}`)}
+                  style={{
+                    background:"rgba(240,162,2,0.05)",
+                    border:"0.5px solid rgba(240,162,2,0.22)",
+                    borderRadius:14,padding:"22px 12px",
+                    textAlign:"center",cursor:"pointer",
+                    transition:"background 0.18s, border-color 0.18s",
+                    ...noEdit,
+                  }}
+                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(240,162,2,0.12)";e.currentTarget.style.borderColor="rgba(240,162,2,0.45)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(240,162,2,0.05)";e.currentTarget.style.borderColor="rgba(240,162,2,0.22)";}}
+                >
+                  <div style={{fontSize:26,marginBottom:10}}>{ic}</div>
+                  <div style={{fontSize:12,color:T.textPrimary,fontWeight:500,letterSpacing:"0.01em"}}>{l}</div>
                 </div>
               ))}
             </div>

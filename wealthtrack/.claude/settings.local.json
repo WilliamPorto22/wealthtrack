@@ -19,7 +19,8 @@
       "Bash(python3)",
       "Read(//c/Users/User/wealthtrack/functions/**)",
       "Bash(npm install:*)",
-      "Bash(npx react-scripts *)"
+      "Bash(npx react-scripts *)",
+      "Bash(npx vite *)"
     ]
   }
 }

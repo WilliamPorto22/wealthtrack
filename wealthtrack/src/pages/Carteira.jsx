@@ -748,7 +748,7 @@ export default function Carteira(){
           )}
           <div className="carteira-liquidez-desc">
             {liquidezObj>0
-              ?"Calculado a partir dos objetivos "Liquidez" nos ativos individuais"
+              ?'Calculado a partir dos objetivos "Liquidez" nos ativos individuais'
               :"Padrão: Pós-Fixado · IPCA+ · Pré-Fixado (defina objetivos por ativo para personalizar)"
             }
           </div>
