@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(npx eslint:*)",
+      "Bash(curl -s http://localhost:5175)",
+      "Bash(dir dist:*)",
+      "Bash(dir .firebase)",
+      "Bash(dir src:*)",
+      "Bash(npm run:*)",
+      "Bash(npx firebase:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(curl -s \"https://api.bcb.gov.br/dados/series/1/dados?formato=json\")",
+      "Bash(curl -s \"https://api.bcb.gov.br/dados/series/1\")",
+      "Bash(curl -s \"https://api.bcb.gov.br/v1/dados/series/1/dados\")",
+      "Bash(curl -s \"https://api.awesomeapi.com.br/json/last/USD-BRL\")",
+      "Bash(python3)",
+      "Read(//c/Users/User/wealthtrack/functions/**)",
+      "Bash(npm install:*)"
+    ]
+  }
+}
