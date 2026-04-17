@@ -122,13 +122,19 @@ const FAIXAS_VEICULO = [
   {label:"Acima de R$ 1M",mid:1200000},
 ];
 const CLASSES_CARTEIRA = [
-  {key:"preFixado", label:"Prefixado", cor:"#F0A202"},
-  {key:"posFixado", label:"Pós Fixado", cor:"#2563eb"},
-  {key:"ipca",     label:"Inflação (IPCA+)", cor:"#22c55e"},
-  {key:"acoes",    label:"Renda Variável", cor:"#f59e0b"},
-  {key:"fiis",     label:"Fundos Imobiliários", cor:"#a855f7"},
-  {key:"multi",    label:"Multimercado", cor:"#06b6d4"},
-  {key:"global",   label:"Global / Exterior", cor:"#60a5fa"},
+  {key:"posFixado",      label:"Pós-Fixado",           cor:"#2563eb"},
+  {key:"ipca",           label:"IPCA+",                cor:"#3b82f6"},
+  {key:"preFixado",      label:"Pré-Fixado",           cor:"#60a5fa"},
+  {key:"acoes",          label:"Ações",                cor:"#22c55e"},
+  {key:"fiis",           label:"FIIs",                 cor:"#F0A202"},
+  {key:"multi",          label:"Multimercado",          cor:"#a07020"},
+  {key:"prevVGBL",       label:"Prev. VGBL",           cor:"#f59e0b"},
+  {key:"prevPGBL",       label:"Prev. PGBL",           cor:"#d97706"},
+  {key:"globalEquities", label:"Global – Equities",    cor:"#a855f7"},
+  {key:"globalTreasury", label:"Global – Treasury",    cor:"#c084fc"},
+  {key:"globalFunds",    label:"Global – Funds",       cor:"#7c3aed"},
+  {key:"globalBonds",    label:"Global – Bonds",       cor:"#9333ea"},
+  {key:"global",         label:"Global (Geral)",       cor:"#60a5fa"},
 ];
 
 const noEdit = {userSelect:"none",WebkitUserSelect:"none",cursor:"default"};
@@ -988,55 +994,114 @@ export default function ClienteFicha() {
             >
               <div style={{paddingTop:16}}>
                 {(totalCarteira>0||totalImoveis>0||totalVeiculos>0)?(()=>{
+                  const totalGlobal = ["globalEquities","globalTreasury","globalFunds","globalBonds","global"].reduce((acc,k)=>acc+parseCentavos(snap.carteira?.[k])/100,0);
+                  const totalNacional = Math.max(totalCarteira - totalGlobal, 0);
+
                   const cats=[
-                    {label:"Investimentos",v:totalCarteira,cor:"#F0A202"},
+                    ...(totalNacional>0?[{label:"Invest. Nacional",v:totalNacional,cor:"#F0A202"}]:[]),
+                    ...(totalGlobal>0?[{label:"Invest. Global",v:totalGlobal,cor:"#a78bfa"}]:[]),
+                    ...(totalCarteira>0&&totalNacional===0&&totalGlobal===0?[{label:"Investimentos",v:totalCarteira,cor:"#F0A202"}]:[]),
                     {label:"Imóveis",v:totalImoveis,cor:"#22c55e"},
                     {label:"Veículos",v:totalVeiculos,cor:"#60a5fa"},
                   ].filter(x=>x.v>0);
+
+                  const classesAtivas = CLASSES_CARTEIRA.map(c=>({
+                    ...c, value:parseCentavos(snap.carteira?.[c.key])/100
+                  })).filter(c=>c.value>0);
+
+                  const pizzaBrGlobal = [
+                    {label:"🇧🇷 Brasil (R$)",value:totalNacional+totalImoveis+totalVeiculos,cor:"#F0A202"},
+                    ...(totalGlobal>0?[{label:"🌎 Global (USD)",value:totalGlobal,cor:"#a78bfa"}]:[]),
+                  ].filter(x=>x.value>0);
+
+                  const liquidezD1 = parseCentavos(snap.carteira?.liquidezD1)/100;
+
+                  const panelStyle={background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:14,padding:"14px 12px"};
+                  const panelTitle={fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10,...noEdit};
+
                   return (
                     <>
-                      {/* ── Gráficos: barras + ring chart lado a lado ── */}
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20,alignItems:"stretch"}}>
-
-                        {/* Painel esquerdo: barras compactas */}
-                        <div style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:14,padding:"14px 10px"}}>
-                          <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10,...noEdit}}>Em Reais (R$)</div>
+                      {/* ── Linha 1: Barras + Pizza Patrimônio por Categoria ── */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12,alignItems:"stretch"}}>
+                        <div style={panelStyle}>
+                          <div style={panelTitle}>Distribuição em Reais (R$)</div>
                           <BarChartVertical items={cats}/>
                         </div>
-
-                        {/* Painel direito: ring chart moderno + legenda */}
-                        <div style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:14,padding:"14px 16px"}}>
-                          <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10,...noEdit}}>Distribuição (%)</div>
-                          <div style={{display:"flex",alignItems:"center",gap:14}}>
-                            {/* Ring chart */}
+                        <div style={panelStyle}>
+                          <div style={panelTitle}>Patrimônio por Categoria (%)</div>
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
                             <div style={{flexShrink:0}}>
-                              <RingChart
-                                data={cats.map(c=>({...c,value:c.v}))}
-                                total={patrimonioDisplay}
-                                size={155}
-                              />
+                              <RingChart data={cats.map(c=>({...c,value:c.v}))} total={patrimonioDisplay} size={130}/>
                             </div>
-                            {/* Legenda vertical */}
                             <div style={{flex:1,minWidth:0}}>
-                              {cats.map(c=>(
-                                <div key={c.label} style={{marginBottom:12,...noEdit}}>
-                                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
-                                    <div style={{display:"flex",alignItems:"center",gap:7}}>
-                                      <div style={{width:8,height:8,borderRadius:2,background:c.cor,boxShadow:`0 0 6px ${c.cor}70`,flexShrink:0}}/>
-                                      <span style={{fontSize:11,color:"#b0bec5"}}>{c.label}</span>
-                                    </div>
-                                    <span style={{fontSize:11,color:c.cor,fontWeight:600}}>{((c.v/patrimonioDisplay)*100).toFixed(0)}%</span>
-                                  </div>
-                                  <div style={{height:2,background:"rgba(255,255,255,0.06)",borderRadius:1,overflow:"hidden"}}>
-                                    <div style={{height:"100%",width:`${(c.v/patrimonioDisplay)*100}%`,background:c.cor,borderRadius:1,boxShadow:`0 0 4px ${c.cor}60`}}/>
-                                  </div>
-                                  <div style={{fontSize:10,color:"#748CAB",marginTop:2}}>{moedaFull(c.v)}</div>
-                                </div>
-                              ))}
+                              {cats.map(c=><LegendaRow key={c.label} label={c.label} v={c.v} cor={c.cor} total={patrimonioDisplay}/>)}
                             </div>
                           </div>
                         </div>
                       </div>
+
+                      {/* ── Linha 2: Pizza Brasil vs Global + Pizza Classes ── */}
+                      {totalCarteira>0&&(
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12,alignItems:"stretch"}}>
+                          {/* Brasil vs Global */}
+                          <div style={panelStyle}>
+                            <div style={panelTitle}>Brasil vs Global (USD)</div>
+                            <div style={{display:"flex",alignItems:"center",gap:10}}>
+                              <div style={{flexShrink:0}}>
+                                <RingChart data={pizzaBrGlobal} total={pizzaBrGlobal.reduce((a,x)=>a+x.value,0)} size={130}/>
+                              </div>
+                              <div style={{flex:1,minWidth:0}}>
+                                {pizzaBrGlobal.map(c=><LegendaRow key={c.label} label={c.label} v={c.value} cor={c.cor} total={pizzaBrGlobal.reduce((a,x)=>a+x.value,0)}/>)}
+                                {totalGlobal===0&&<div style={{fontSize:9,color:T.textMuted,marginTop:6,...noEdit}}>Sem investimentos globais cadastrados</div>}
+                              </div>
+                            </div>
+                          </div>
+                          {/* Classes da Carteira */}
+                          <div style={panelStyle}>
+                            <div style={panelTitle}>Distribuição por Classes</div>
+                            {classesAtivas.length>0?(
+                              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                                <div style={{flexShrink:0}}>
+                                  <RingChart data={classesAtivas} total={totalCarteira} size={130}/>
+                                </div>
+                                <div style={{flex:1,minWidth:0}}>
+                                  {classesAtivas.map(c=><LegendaRow key={c.key} label={c.label} v={c.value} cor={c.cor} total={totalCarteira}/>)}
+                                </div>
+                              </div>
+                            ):(
+                              <div style={{fontSize:11,color:T.textMuted,padding:"8px 0",...noEdit}}>
+                                Cadastre a carteira para ver as classes.{" "}
+                                <span style={{color:"#F0A202",cursor:"pointer"}} onClick={()=>navigate(`/cliente/${id}/carteira`)}>Abrir →</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Liquidez ── */}
+                      {totalCarteira>0&&(
+                        <div style={{...panelStyle,marginBottom:12}}>
+                          <div style={panelTitle}>Liquidez da Carteira</div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                            <div style={{background:"rgba(34,197,94,0.05)",border:"0.5px solid rgba(34,197,94,0.18)",borderRadius:10,padding:"12px 14px",...noEdit}}>
+                              <div style={{fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>D+1 — Resgate Imediato</div>
+                              <div style={{fontSize:15,fontWeight:300,color:"#22c55e"}}>
+                                {liquidezD1>0?moedaFull(liquidezD1):"—"}
+                              </div>
+                              {liquidezD1>0?(
+                                <div style={{fontSize:9,color:"#748CAB",marginTop:3}}>{((liquidezD1/totalCarteira)*100).toFixed(0)}% da carteira</div>
+                              ):(
+                                <div style={{fontSize:9,color:"#748CAB",marginTop:3}}>Cadastre na seção Carteira</div>
+                              )}
+                            </div>
+                            <div style={{background:"rgba(240,162,2,0.05)",border:"0.5px solid rgba(240,162,2,0.18)",borderRadius:10,padding:"12px 14px",...noEdit}}>
+                              <div style={{fontSize:9,color:"#fcd34d",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Total Investido</div>
+                              <div style={{fontSize:15,fontWeight:300,color:"#F0A202"}}>{moedaFull(totalCarteira)}</div>
+                              <div style={{fontSize:9,color:"#748CAB",marginTop:3}}>Carteira completa</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* ── Patrimônio Financeiro ── */}
                       {(()=>{
