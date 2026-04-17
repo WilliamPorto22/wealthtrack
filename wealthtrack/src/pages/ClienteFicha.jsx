@@ -236,8 +236,8 @@ function BarChartVertical({items}) {
   if(!active.length) return null;
   const maxVal=Math.max(...active.map(i=>i.v));
   const rounded=Math.ceil(maxVal/100000)*100000||1;
-  const H=52, barW=18, gap=46, leftPad=30, topPad=8, botPad=22;
-  const totalW=leftPad+active.length*(barW+gap)-gap+8;
+  const H=100, barW=36, gap=56, leftPad=40, topPad=14, botPad=30;
+  const totalW=leftPad+active.length*(barW+gap)-gap+16;
   const totalH=topPad+H+botPad;
   const ticks=[0,0.5,1].map(t=>rounded*t);
   function yPos(v){return topPad+H-Math.max((v/rounded)*H,0);}
@@ -251,33 +251,50 @@ function BarChartVertical({items}) {
     if(v>=1000) return `R$ ${Math.round(v/1000)}k`;
     return `R$ ${v}`;
   }
-  function shortLabel(s){return s.length>8?s.slice(0,7)+"…":s;}
   return (
-    <div style={{display:"flex",justifyContent:"center",width:"100%"}}>
-      <svg viewBox={`0 0 ${totalW} ${totalH}`} height={86} style={{overflow:"visible",...noEdit}}>
-        {/* Grid + Y labels */}
-        {ticks.map((t,i)=>(
-          <g key={i}>
-            <line x1={leftPad} y1={yPos(t)} x2={totalW-2} y2={yPos(t)} stroke="rgba(255,255,255,0.07)" strokeWidth={0.5}/>
-            <text x={leftPad-4} y={yPos(t)+3.5} textAnchor="end" fontSize={7} fill={T.textMuted} fontFamily={T.fontFamily}>{lbl(t)}</text>
+    <svg viewBox={`0 0 ${totalW} ${totalH}`} width="100%" style={{display:"block",overflow:"visible",...noEdit}}>
+      {/* Grid + Y labels */}
+      {ticks.map((t,i)=>(
+        <g key={i}>
+          <line x1={leftPad} y1={yPos(t)} x2={totalW-4} y2={yPos(t)} stroke="rgba(255,255,255,0.07)" strokeWidth={0.5}/>
+          <text x={leftPad-6} y={yPos(t)+3.5} textAnchor="end" fontSize={9} fill={T.textMuted} fontFamily={T.fontFamily}>{lbl(t)}</text>
+        </g>
+      ))}
+      {/* Bars */}
+      {active.map((item,i)=>{
+        const x=leftPad+i*(barW+gap);
+        const bH=Math.max((item.v/rounded)*H,4);
+        const y=yPos(item.v);
+        return (
+          <g key={item.label}>
+            <rect x={x} y={y} width={barW} height={bH} fill={item.cor} rx={5} opacity={0.88}/>
+            <text x={x+barW/2} y={y-6} textAnchor="middle" fontSize={9} fill={item.cor} fontFamily={T.fontFamily}>{valLbl(item.v)}</text>
+            <text x={x+barW/2} y={topPad+H+18} textAnchor="middle" fontSize={9} fill={T.textMuted} fontFamily={T.fontFamily}>{item.label}</text>
           </g>
-        ))}
-        {/* Bars */}
-        {active.map((item,i)=>{
-          const x=leftPad+i*(barW+gap);
-          const bH=Math.max((item.v/rounded)*H,3);
-          const y=yPos(item.v);
-          return (
-            <g key={item.label}>
-              <rect x={x} y={y} width={barW} height={bH} fill={item.cor} rx={3} opacity={0.88}/>
-              <text x={x+barW/2} y={y-4} textAnchor="middle" fontSize={7} fill={item.cor} fontFamily={T.fontFamily}>{valLbl(item.v)}</text>
-              <text x={x+barW/2} y={topPad+H+14} textAnchor="middle" fontSize={7} fill={T.textMuted} fontFamily={T.fontFamily}>{shortLabel(item.label)}</text>
-            </g>
-          );
-        })}
-        {/* Baseline */}
-        <line x1={leftPad} y1={topPad+H} x2={totalW-2} y2={topPad+H} stroke="rgba(255,255,255,0.12)" strokeWidth={0.5}/>
-      </svg>
+        );
+      })}
+      {/* Baseline */}
+      <line x1={leftPad} y1={topPad+H} x2={totalW-4} y2={topPad+H} stroke="rgba(255,255,255,0.12)" strokeWidth={0.5}/>
+    </svg>
+  );
+}
+
+// Legenda compacta reutilizável para ring charts
+function LegendaRow({label, v, cor, total}) {
+  const pct = total>0?((v/total)*100).toFixed(0):0;
+  return (
+    <div style={{marginBottom:7,...noEdit}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2}}>
+        <div style={{display:"flex",alignItems:"center",gap:5}}>
+          <div style={{width:7,height:7,borderRadius:2,background:cor,flexShrink:0}}/>
+          <span style={{fontSize:10,color:"#b0bec5",lineHeight:1.3}}>{label}</span>
+        </div>
+        <span style={{fontSize:10,color:cor,fontWeight:600}}>{pct}%</span>
+      </div>
+      <div style={{height:2,background:"rgba(255,255,255,0.06)",borderRadius:1,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${pct}%`,background:cor,borderRadius:1}}/>
+      </div>
+      <div style={{fontSize:9,color:"#748CAB",marginTop:1}}>{moedaFull(v)}</div>
     </div>
   );
 }
