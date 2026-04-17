@@ -26,7 +26,17 @@
       "Bash(node --experimental-vm-modules --input-type=module)",
       "Bash(python -c ' *)",
       "Bash(pip install *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(powershell -Command \"Get-Content 'C:\\\\Users\\\\User\\\\.claude\\\\projects\\\\C--Users-User-wealthtrack\\\\ea7f8b05-25fb-477c-b198-fdaa90817ac2.jsonl' | Select-Object -Last 200\")",
+      "Bash(powershell -Command \"Get-Content 'C:\\\\Users\\\\User\\\\.claude\\\\projects\\\\C--Users-User-wealthtrack\\\\ea7f8b05-25fb-477c-b198-fdaa90817ac2.jsonl' -Tail 50\")",
+      "Bash(powershell -Command \"Get-Content 'C:\\\\Users\\\\User\\\\.claude\\\\projects\\\\C--Users-User-wealthtrack\\\\ea7f8b05-25fb-477c-b198-fdaa90817ac2.jsonl' -Tail 5\")",
+      "Bash(powershell -Command \"Select-String -Pattern 'tool_result' 'C:\\\\Users\\\\User\\\\.claude\\\\projects\\\\C--Users-User-wealthtrack\\\\ea7f8b05-25fb-477c-b198-fdaa90817ac2\\\\tool-results\\\\b4yadepbz.txt' | Select-Object -Last 5\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const src=fs.readFileSync\\('./src/utils/documentParser.js','utf8'\\); console.log\\('Lines:',src.split\\('\\\\n'\\).length,'chars:',src.length\\); console.log\\('OK - no parse errors expected'\\);\")",
+      "Bash(npx --yes acorn --ecma2020 --module src/utils/documentParser.js)",
+      "Bash(npx acorn *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer"
     ]
   }
 }

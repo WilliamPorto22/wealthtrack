@@ -229,8 +229,23 @@ function parseRelatorio(text) {
     if (m) { result._ganhoMes = parseBRL(m[1]); break; }
   }
 
+  // ── Fallback KPIs — layout XP: cabeçalhos numa linha, valores na linha de baixo ─
+  // Ex.: "PATRIMÔNIO TOTAL BRUTO: RENTABILIDADE MÊS: GANHO MÊS: …\nR$ 684.412,90 1,06% R$ 6.238,08 …"
+  if (!result._patrimonioTotal) {
+    const kpiIdx = nt.search(/PATRIM.{0,6}NIO\s+TOTAL/i);
+    if (kpiIdx >= 0) {
+      const kpiChunk = nt.slice(kpiIdx, Math.min(nt.length, kpiIdx + 600));
+      const rVals = [...kpiChunk.matchAll(/R\$\s*([\d.]+,\d{2})/g)];
+      const pVals = [...kpiChunk.matchAll(/([-\d]+,\d{1,2})%(?![,\d])/g)];
+      if (rVals[0]) result._patrimonioTotal = parseBRL(rVals[0][1]);
+      if (!result._rentMes && pVals[0]) result._rentMes = pVals[0][1].replace(",", ".");
+      if (!result._ganhoMes && rVals[1]) result._ganhoMes = parseBRL(rVals[1][1]);
+    }
+  }
+
   // ── Extração de classes — processa linha a linha ────────────
-  // Pré-processa: une linhas que terminam com " -" (nomes longos que quebram)
+  // Pré-processa: une linhas que terminam com " -" ou com taxa "NN,NN% WORD"
+  // (nomes longos que quebram no PDF quando excedem a coluna)
   const rawLines = text.split("\n");
   const lines = [];
   let carry = "";
@@ -240,8 +255,14 @@ function parseRelatorio(text) {
       if (carry) { lines.push(carry.trim()); carry = ""; }
       continue;
     }
-    // Se a linha termina com espaço+hífen (nome quebrado), une com a próxima
-    if (/\s-$/.test(t) && !/ R\$/.test(t)) {
+    // Critérios de carry (linha incompleta que continua na próxima):
+    //   1. Termina com " -"  (ex: "CDB BANCO SAFRA - MAI/2028 -")
+    //   2. Termina com "NN,NN%" ou "NN,NN% PALAVRA" sem R$ (ex: "CDB BANCO - 101,00%")
+    const isCarry =
+      !/ R\$/.test(t) &&
+      t.length > 8 &&
+      (/\s-$/.test(t) || /\d[\d,]+%(?:\s+[A-Z]+)?$/.test(t));
+    if (isCarry) {
       carry += t + " ";
     } else {
       lines.push((carry + t).trim());
@@ -261,15 +282,20 @@ function parseRelatorio(text) {
     const nt_line = norm(t);
 
     // ── Detectar linha de composição: "ClassName (XX,XX%) R$ VALUE" ─
-    // Funciona no texto normalizado (sem acentos)
+    // Funciona no texto normalizado (sem acentos).
+    // Aceita prefixo "99,98% " que o pdfjs/pdfplumber inclui do gráfico "Total investido"
     const compM = nt_line.match(
-      /^([A-Z][A-Z\s\/\-\.]{2,40}?)\s+\(?(\d[\d,]+)%\)?\s+R\$\s*([\d.]+,\d{2})/
+      /^(?:\d{1,3}[\d,]*%\s+)?([A-Z][A-Z\s\/\-\.]{2,40}?)\s+\(?(\d[\d,]+)%\)?\s+R\$\s*([\d.]+,\d{2})/
     );
     if (compM) {
       const key = classNameToKey(compM[1]);
       if (key) {
         const val = parseBRL(compM[3]);
-        if (val >= 100 && !result[key]) result[key] = String(val);
+        // Acumula: ex. "Fundos Listados" + "Alternativo" ambos mapeiam para fiis
+        if (val >= 100) {
+          const existing = parseInt(result[key] || "0");
+          result[key] = String(existing + val);
+        }
         continue;
       }
     }
