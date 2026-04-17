@@ -36,7 +36,11 @@
       "Bash(npx acorn *)",
       "mcp__Claude_in_Chrome__tabs_context_mcp",
       "mcp__Claude_in_Chrome__navigate",
-      "mcp__Claude_in_Chrome__computer"
+      "mcp__Claude_in_Chrome__computer",
+      "Bash(gh api *)",
+      "Bash(cat .env)",
+      "Bash(cat .env.production)",
+      "Bash(ls *.json)"
     ]
   }
 }

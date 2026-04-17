@@ -16,6 +16,12 @@ const MERCADO_PADRAO=[
 ];
 
 const SEGS=["Digital","Ascensão","Exclusive","Private"];
+const SEG_COLORS={
+  "Digital":    {color:"#38bdf8", bg:"rgba(56,189,248,0.12)",  border:"rgba(56,189,248,0.30)"},
+  "Ascensão":   {color:"#4ade80", bg:"rgba(74,222,128,0.12)",  border:"rgba(74,222,128,0.30)"},
+  "Exclusive":  {color:"#f59e0b", bg:"rgba(245,158,11,0.12)",  border:"rgba(245,158,11,0.30)"},
+  "Private":    {color:"#c084fc", bg:"rgba(192,132,252,0.12)", border:"rgba(192,132,252,0.30)"},
+};
 // Removido: user-select para evitar cursor piscante não profissional
 const font="-apple-system,'SF Pro Display',sans-serif";
 const BG="#0D1321", CARD="#1D2D44", BD="rgba(62,92,118,0.35)";
@@ -313,7 +319,7 @@ export default function Dashboard(){
   const porSeg={};
   SEGS.forEach(s=>{porSeg[s]=[];});
   clientesComStatus.forEach(c=>{
-    const s=segAuto(c.patrimonio);
+    const s=c.segmento||segAuto(c.patrimonio);
     if(porSeg[s])porSeg[s].push(c);
   });
 
@@ -518,8 +524,8 @@ export default function Dashboard(){
               {SEGS.map(seg=>(
                 <div key={seg} className="dashboard-segment">
                   <div className="dashboard-segment-header">
-                    <span className="dashboard-segment-title">{seg}</span>
-                    <span className="dashboard-segment-count">{porSeg[seg].length}</span>
+                    <span className="dashboard-segment-title" style={{color:SEG_COLORS[seg].color}}>{seg}</span>
+                    <span className="dashboard-segment-count" style={{color:SEG_COLORS[seg].color,background:SEG_COLORS[seg].bg,border:`0.5px solid ${SEG_COLORS[seg].border}`}}>{porSeg[seg].length}</span>
                   </div>
                   <div className="dashboard-segment-clients">
                     {porSeg[seg].length===0?(
