@@ -738,15 +738,17 @@ export default function Carteira() {
           {/* Tabela */}
           <div style={{ ...C.card, padding: 0, overflow: "hidden" }}>
             <div style={{
-              display: "grid", gridTemplateColumns: "1.5fr 1fr 70px 70px 90px 40px",
-              padding: "14px 18px", borderBottom: `0.5px solid ${T.border}`,
-              fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", ...noSel,
+              display: "grid", gridTemplateColumns: "1.4fr 1fr 60px 80px 80px 1.1fr 28px",
+              padding: "16px 18px", borderBottom: `0.5px solid ${T.border}`,
+              fontSize: 11, color: T.textSecondary, textTransform: "uppercase", letterSpacing: "0.1em",
+              fontWeight: 500, ...noSel,
             }}>
               <div>Classe</div>
               <div style={{ textAlign: "right" }}>Valor</div>
               <div style={{ textAlign: "right" }}>%</div>
-              <div style={{ textAlign: "right" }}>Rent.</div>
-              <div style={{ textAlign: "center" }}>Liquidez</div>
+              <div style={{ textAlign: "right" }}>Rent Mês</div>
+              <div style={{ textAlign: "right" }}>Rent Ano</div>
+              <div style={{ paddingLeft: 14 }}>Objetivo</div>
               <div />
             </div>
             {classesAtivas.length === 0 && (
@@ -757,10 +759,22 @@ export default function Carteira() {
             {classesAtivas.map((c) => {
               const p = total > 0 ? Math.round((c.valor / total) * 100) : 0;
               const ativos = getAtivos(c.key);
-              // rentab média ponderada da classe
-              const ativosComRent = ativos.filter((a) => parseFloat(String(a.rentAno).replace(",", ".")) && parseCentavos(a.valor) > 0);
-              const somaC = ativosComRent.reduce((acc, a) => acc + parseCentavos(a.valor) / 100, 0);
-              const rentC = somaC > 0 ? ativosComRent.reduce((acc, a) => acc + parseFloat(String(a.rentAno).replace(",", ".")) * parseCentavos(a.valor) / 100, 0) / somaC : null;
+              // rentab média ponderada da classe (ano e mês)
+              const ativosComRentAno = ativos.filter((a) => parseFloat(String(a.rentAno).replace(",", ".")) && parseCentavos(a.valor) > 0);
+              const somaAno = ativosComRentAno.reduce((acc, a) => acc + parseCentavos(a.valor) / 100, 0);
+              const rentAnoC = somaAno > 0 ? ativosComRentAno.reduce((acc, a) => acc + parseFloat(String(a.rentAno).replace(",", ".")) * parseCentavos(a.valor) / 100, 0) / somaAno : null;
+              const ativosComRentMes = ativos.filter((a) => parseFloat(String(a.rentMes).replace(",", ".")) && parseCentavos(a.valor) > 0);
+              const somaMes = ativosComRentMes.reduce((acc, a) => acc + parseCentavos(a.valor) / 100, 0);
+              const rentMesC = somaMes > 0 ? ativosComRentMes.reduce((acc, a) => acc + parseFloat(String(a.rentMes).replace(",", ".")) * parseCentavos(a.valor) / 100, 0) / somaMes : null;
+              // objetivo dominante da classe (por valor)
+              const objMap = {};
+              ativos.forEach((a) => {
+                if (!a.objetivo) return;
+                objMap[a.objetivo] = (objMap[a.objetivo] || 0) + parseCentavos(a.valor) / 100;
+              });
+              const objOrdenados = Object.entries(objMap).sort((a, b) => b[1] - a[1]);
+              const objPrincipal = objOrdenados[0]?.[0] || null;
+              const nObj = objOrdenados.length;
               return (
                 <div
                   key={c.key}
@@ -768,8 +782,8 @@ export default function Carteira() {
                   onMouseEnter={() => setHoverFatia(c.key)}
                   onMouseLeave={() => setHoverFatia(null)}
                   style={{
-                    display: "grid", gridTemplateColumns: "1.5fr 1fr 70px 70px 90px 40px",
-                    padding: "14px 18px", borderBottom: `0.5px solid ${T.border}`,
+                    display: "grid", gridTemplateColumns: "1.4fr 1fr 60px 80px 80px 1.1fr 28px",
+                    padding: "16px 18px", borderBottom: `0.5px solid ${T.border}`,
                     cursor: "pointer", alignItems: "center",
                     background: hoverFatia === c.key ? `rgba(${hexToRgb(c.cor)},0.05)` : "transparent",
                     transition: "background 0.15s",
@@ -777,23 +791,42 @@ export default function Carteira() {
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                    <div style={{ width: 3, height: 22, borderRadius: 2, background: c.cor, flexShrink: 0 }} />
+                    <div style={{ width: 3, height: 24, borderRadius: 2, background: c.cor, flexShrink: 0 }} />
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: T.textPrimary, fontWeight: 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</div>
-                      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>
-                        {ativos.length > 0 ? `${ativos.length} ativo${ativos.length > 1 ? "s" : ""}` : "valor da classe"}
+                      <div style={{ fontSize: 14, color: T.textPrimary, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</div>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+                        {ativos.length > 0 ? `${ativos.length} ativo${ativos.length > 1 ? "s" : ""} · liq ${c.liq}` : `valor da classe · liq ${c.liq}`}
                       </div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, color: T.textPrimary, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{brl(c.valor)}</div>
-                  <div style={{ fontSize: 12, color: c.cor, textAlign: "right", fontWeight: 500 }}>{p}%</div>
-                  <div style={{ fontSize: 11, textAlign: "right", color: rentC !== null ? (rentC > 0 ? T.success : T.danger) : T.textMuted, fontVariantNumeric: "tabular-nums" }}>
-                    {rentC !== null ? `${rentC > 0 ? "+" : ""}${rentC.toFixed(1)}%` : "—"}
+                  <div style={{ fontSize: 14, color: T.textPrimary, textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 500 }}>{brl(c.valor)}</div>
+                  <div style={{ fontSize: 13, color: c.cor, textAlign: "right", fontWeight: 600 }}>{p}%</div>
+                  <div style={{ fontSize: 12, textAlign: "right", color: rentMesC !== null ? (rentMesC > 0 ? T.success : T.danger) : T.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                    {rentMesC !== null ? `${rentMesC > 0 ? "+" : ""}${rentMesC.toFixed(2)}%` : "—"}
                   </div>
-                  <div style={{ fontSize: 10, color: "#60a5fa", textAlign: "center", letterSpacing: "0.04em" }}>{c.liq}</div>
-                  <div style={{ color: T.textMuted, fontSize: 14, textAlign: "right" }}>›</div>
+                  <div style={{ fontSize: 12, textAlign: "right", color: rentAnoC !== null ? (rentAnoC > 0 ? T.success : T.danger) : T.textMuted, fontVariantNumeric: "tabular-nums" }}>
+                    {rentAnoC !== null ? `${rentAnoC > 0 ? "+" : ""}${rentAnoC.toFixed(2)}%` : "—"}
+                  </div>
+                  <div style={{ paddingLeft: 14, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    {objPrincipal ? (
+                      <>
+                        <span style={{
+                          fontSize: 11, color: T.gold, background: "rgba(240,162,2,0.08)",
+                          border: "0.5px solid rgba(240,162,2,0.3)", borderRadius: 4,
+                          padding: "3px 8px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          maxWidth: "100%",
+                        }}>{objPrincipal}</span>
+                        {nObj > 1 && (
+                          <span style={{ fontSize: 10, color: T.textMuted }}>+{nObj - 1}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 11, color: T.textMuted, fontStyle: "italic" }}>definir →</span>
+                    )}
+                  </div>
+                  <div style={{ color: T.textMuted, fontSize: 16, textAlign: "right" }}>›</div>
                   {/* barra progresso */}
-                  <div style={{ gridColumn: "1 / -1", height: 2, background: "rgba(255,255,255,0.04)", borderRadius: 1, overflow: "hidden", marginTop: 8 }}>
+                  <div style={{ gridColumn: "1 / -1", height: 2, background: "rgba(255,255,255,0.04)", borderRadius: 1, overflow: "hidden", marginTop: 10 }}>
                     <div style={{ height: "100%", width: `${p}%`, background: c.cor, opacity: 0.7 }} />
                   </div>
                 </div>
@@ -802,13 +835,13 @@ export default function Carteira() {
             {/* Footer total */}
             {classesAtivas.length > 0 && (
               <div style={{
-                padding: "14px 18px",
+                padding: "16px 18px",
                 display: "flex", justifyContent: "space-between", alignItems: "center",
                 background: "rgba(240,162,2,0.04)",
                 ...noSel,
               }}>
-                <span style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em" }}>Total</span>
-                <span style={{ fontSize: 15, color: T.gold, fontWeight: 400, fontVariantNumeric: "tabular-nums" }}>{brl(total)}</span>
+                <span style={{ fontSize: 12, color: T.textSecondary, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 500 }}>Total</span>
+                <span style={{ fontSize: 17, color: T.gold, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{brl(total)}</span>
               </div>
             )}
           </div>
@@ -930,47 +963,102 @@ export default function Carteira() {
         )}
 
         {/* ── APORTES ── */}
-        <SectionTitle action={<button onClick={() => setAporteModal(true)} style={linkBtnStyle}>+ registrar aporte</button>}>
-          Histórico de Aportes
-        </SectionTitle>
+        <SectionTitle>Histórico de Aportes</SectionTitle>
         <div style={{ ...C.card, padding: 0, overflow: "hidden", marginBottom: 22 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", padding: "18px 20px", borderBottom: `0.5px solid ${T.border}` }}>
-            <Mini label="Total aportado" value={brl(aporteTotal)} cor="#a855f7" />
-            <Mini label="Média por aporte" value={brl(aporteMedio)} cor="#c084fc" />
-            <Mini label={`Aporte ${mesAtualStr()}`} value={brl(aporteMesAtual)} cor={T.gold} />
+          {/* Stats row + ação principal */}
+          <div style={{
+            padding: "20px 24px",
+            borderBottom: `0.5px solid ${T.border}`,
+            display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
+          }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(120px, 1fr))", gap: 20, flex: 1, minWidth: 320 }}>
+              <div>
+                <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 6, ...noSel }}>Total aportado</div>
+                <div style={{ fontSize: 18, color: "#a855f7", fontWeight: 500, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{brl(aporteTotal)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 6, ...noSel }}>Média por aporte</div>
+                <div style={{ fontSize: 18, color: "#c084fc", fontWeight: 500, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{brl(aporteMedio)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 6, ...noSel }}>Aporte {mesAtualStr()}</div>
+                <div style={{ fontSize: 18, color: aporteMesAtual > 0 ? T.gold : T.textMuted, fontWeight: 500, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>
+                  {aporteMesAtual > 0 ? brl(aporteMesAtual) : "—"}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setAporteModal(true)}
+              style={{
+                padding: "12px 20px",
+                background: "linear-gradient(135deg, rgba(168,85,247,0.2), rgba(168,85,247,0.1))",
+                border: "0.5px solid rgba(168,85,247,0.45)",
+                borderRadius: T.radiusMd,
+                color: "#c084fc", fontSize: 12, cursor: "pointer",
+                fontFamily: T.fontFamily, letterSpacing: "0.1em", textTransform: "uppercase",
+                fontWeight: 600,
+                display: "flex", alignItems: "center", gap: 8,
+                whiteSpace: "nowrap",
+                transition: "all 0.15s",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(168,85,247,0.3), rgba(168,85,247,0.18))"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(168,85,247,0.2), rgba(168,85,247,0.1))"; }}
+            >
+              <span style={{ fontSize: 16, fontWeight: 400 }}>+</span>
+              Aporte {mesAtualStr()}
+            </button>
           </div>
+
           {aportesHistorico.length === 0 ? (
-            <div style={{ padding: "28px 20px", textAlign: "center", color: T.textMuted, fontSize: 12, ...noSel }}>
-              Nenhum aporte registrado. Clique em <strong style={{ color: T.gold }}>+ registrar aporte</strong> para começar.
+            <div style={{ padding: "32px 24px", textAlign: "center", color: T.textMuted, fontSize: 13, ...noSel }}>
+              Nenhum aporte registrado. Use o botão <strong style={{ color: "#c084fc" }}>+ Aporte {mesAtualStr()}</strong> acima para começar.
             </div>
           ) : (
-            <div style={{ maxHeight: 260, overflowY: "auto" }}>
-              {aportesHistorico.slice(0, 20).map((a) => {
-                const d = a.data ? new Date(a.data) : null;
-                return (
-                  <div key={a.id} style={{
-                    display: "grid", gridTemplateColumns: "80px 1fr 120px 40px",
-                    padding: "12px 20px", borderBottom: `0.5px solid ${T.border}`,
-                    alignItems: "center", gap: 10,
-                  }}>
-                    <div style={{ fontSize: 11, color: T.textMuted, fontVariantNumeric: "tabular-nums" }}>
-                      {d ? d.toLocaleDateString("pt-BR") : "—"}
+            <>
+              <div style={{
+                display: "grid", gridTemplateColumns: "110px 1fr 140px 40px",
+                padding: "12px 24px", borderBottom: `0.5px solid ${T.border}`,
+                fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", ...noSel,
+                background: "rgba(255,255,255,0.015)",
+              }}>
+                <div>Data</div>
+                <div>Observação</div>
+                <div style={{ textAlign: "right" }}>Valor</div>
+                <div />
+              </div>
+              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                {aportesHistorico.slice(0, 20).map((a) => {
+                  const d = a.data ? new Date(a.data) : null;
+                  return (
+                    <div key={a.id} style={{
+                      display: "grid", gridTemplateColumns: "110px 1fr 140px 40px",
+                      padding: "14px 24px", borderBottom: `0.5px solid ${T.border}`,
+                      alignItems: "center", gap: 12,
+                    }}>
+                      <div style={{ fontSize: 12, color: T.textSecondary, fontVariantNumeric: "tabular-nums" }}>
+                        {d ? d.toLocaleDateString("pt-BR") : "—"}
+                      </div>
+                      <div style={{ fontSize: 12, color: T.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {a.observacao || <span style={{ color: T.textMuted, fontStyle: "italic" }}>sem observação</span>}
+                      </div>
+                      <div style={{ fontSize: 14, color: T.gold, textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+                        + {brl(parseCentavos(a.valor) / 100)}
+                      </div>
+                      <button
+                        onClick={() => removerAporte(a.id)}
+                        style={{
+                          background: "none", border: "none", color: T.textMuted, cursor: "pointer",
+                          fontSize: 16, padding: 4, borderRadius: 4,
+                        }}
+                        title="Remover aporte"
+                        onMouseEnter={(e) => { e.currentTarget.style.color = T.danger; e.currentTarget.style.background = "rgba(239,68,68,0.08)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = T.textMuted; e.currentTarget.style.background = "none"; }}
+                      >×</button>
                     </div>
-                    <div style={{ fontSize: 12, color: T.textSecondary, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {a.observacao || "—"}
-                    </div>
-                    <div style={{ fontSize: 13, color: T.gold, textAlign: "right", fontWeight: 500 }}>
-                      + {brl(parseCentavos(a.valor) / 100)}
-                    </div>
-                    <button
-                      onClick={() => removerAporte(a.id)}
-                      style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 14 }}
-                      title="Remover aporte"
-                    >×</button>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
@@ -1024,13 +1112,14 @@ function SectionTitle({ children, action }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      marginTop: 8, marginBottom: 12,
+      marginTop: 12, marginBottom: 16,
     }}>
       <div style={{
-        fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.18em",
-        display: "flex", alignItems: "center", gap: 10, ...noSel,
+        fontSize: 14, color: T.textSecondary, textTransform: "uppercase", letterSpacing: "0.14em",
+        fontWeight: 500,
+        display: "flex", alignItems: "center", gap: 12, ...noSel,
       }}>
-        <div style={{ width: 24, height: 1, background: T.gold, opacity: 0.6 }} />
+        <div style={{ width: 32, height: 2, background: T.gold, opacity: 0.8, borderRadius: 1 }} />
         {children}
       </div>
       {action}
@@ -1179,8 +1268,19 @@ function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddA
                       <div style={{ fontSize: 13, color: T.textPrimary, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
                         {a.nome || <span style={{ color: T.textMuted, fontStyle: "italic" }}>Ativo sem nome</span>}
                       </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-                        {a.objetivo && <Tag cor={T.gold}>{a.objetivo}</Tag>}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
+                        {a.objetivo ? (
+                          <Tag cor={T.gold}>🎯 {a.objetivo}</Tag>
+                        ) : (
+                          <span
+                            onClick={() => onEditAtivo(idx)}
+                            style={{
+                              fontSize: 9, color: T.gold, background: "rgba(240,162,2,0.05)",
+                              border: "0.5px dashed rgba(240,162,2,0.35)", borderRadius: 4,
+                              padding: "2px 7px", letterSpacing: "0.03em", cursor: "pointer", ...noSel,
+                            }}
+                          >+ definir objetivo</span>
+                        )}
                         {a.segmento && <Tag cor="#60a5fa">{a.segmento}</Tag>}
                         {a.vencimento && <Tag cor={T.textSecondary}>venc {a.vencimento}</Tag>}
                       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import gsap from "gsap";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
@@ -304,10 +304,10 @@ export default function Dashboard(){
     }
   };
 
-  // Configurar atualização automática
-  useEffect(()=>{
-    // Carregar clientes
-    getDocs(collection(db,"clientes")).then(s=>{
+  // Carregar clientes (com reload on window focus para sincronizar com outras páginas)
+  const carregarClientes=useCallback(async()=>{
+    try{
+      const s=await getDocs(collection(db,"clientes"));
       const clientesData=s.docs.map(d=>({id:d.id,...d.data()}));
       setClientes(clientesData);
       setTimeout(()=>{
@@ -320,90 +320,92 @@ export default function Dashboard(){
           {opacity:1,x:0,duration:0.35,stagger:0.08,ease:"power2.out"}
         );
       },50);
-    }).catch(e=>console.error("Erro ao carregar clientes:",e));
+    }catch(e){console.error("Erro ao carregar clientes:",e);}
+  },[]);
 
-    // Atualizar cotações imediatamente na primeira carga
+  useEffect(()=>{
+    carregarClientes();
+    const onFocus=()=>carregarClientes();
+    window.addEventListener("focus",onFocus);
+    return()=>window.removeEventListener("focus",onFocus);
+  },[carregarClientes]);
+
+  // Atualização automática de cotações — intervalo reconfigurado quando mercado abre/fecha
+  useEffect(()=>{
     atualizarCotacoesServidor();
 
-    // Função para configurar o intervalo de atualização
-    const configurarIntervalo=()=>{
-      // Verificar se mercado está aberto
-      const aberto=mercadoAberto();
-      setStatusMercado(aberto);
+    const aberto=mercadoAberto();
+    if(aberto!==statusMercado)setStatusMercado(aberto);
 
-      if(aberto){
-        // Mercado aberto - atualizar a cada 2 horas
-        if(intervaloRef.current)clearInterval(intervaloRef.current);
-        intervaloRef.current=setInterval(()=>{
+    if(aberto){
+      // Mercado aberto: atualizar no intervalo configurado (ex. 2h)
+      intervaloRef.current=setInterval(atualizarCotacoesServidor,INTERVALO_ATUALIZACAO);
+    }else{
+      // Mercado fechado: verificar a cada minuto se abriu
+      intervaloRef.current=setInterval(()=>{
+        if(mercadoAberto()){
+          setStatusMercado(true);
           atualizarCotacoesServidor();
-        },INTERVALO_ATUALIZACAO);
-      }else{
-        // Mercado fechado - limpar intervalo
-        if(intervaloRef.current)clearInterval(intervaloRef.current);
-
-        // Agendar verificação a cada minuto para quando abrir
-        if(intervaloRef.current)clearInterval(intervaloRef.current);
-        intervaloRef.current=setInterval(()=>{
-          const agoraAberto=mercadoAberto();
-          if(agoraAberto!==statusMercado){
-            setStatusMercado(agoraAberto);
-            if(agoraAberto)atualizarCotacoesServidor();
-          }
-        },60000); // Verificar a cada minuto
-      }
-    };
-
-    configurarIntervalo();
+        }
+      },60000);
+    }
 
     return()=>{
-      if(intervaloRef.current)clearInterval(intervaloRef.current);
+      if(intervaloRef.current){
+        clearInterval(intervaloRef.current);
+        intervaloRef.current=null;
+      }
     };
   },[statusMercado]);
 
-  // Calcular status de cada cliente
-  const clientesComStatus=clientes.map(c=>({
+  // Calcular status de cada cliente (memoizado)
+  const clientesComStatus=useMemo(()=>clientes.map(c=>({
     ...c,
     _sAporte: statusAporte(c),
     _sRevisao: statusRevisao(c),
     _inviavel: temInviavel(c),
     _followUp: followUpVencido(c),
     _sReserva: statusReserva(c),
-  }));
+  })),[clientes]);
 
-  // Alertas reais
-  const semAporte  =clientesComStatus.filter(c=>c._sAporte==="sem_aporte");
-  const semRevisao =clientesComStatus.filter(c=>c._sRevisao==="atrasada");
-  const comInviavel=clientesComStatus.filter(c=>c._inviavel);
-  const comFollowUp=clientesComStatus.filter(c=>c._followUp);
-
-  // Agrupamento por segmento
-  const porSeg={};
-  SEGS.forEach(s=>{porSeg[s]=[];});
-  clientesComStatus.forEach(c=>{
-    const s=segAuto(getPatFin(c));
-    if(porSeg[s])porSeg[s].push(c);
-  });
+  // Alertas e agrupamentos derivados (memoizados para não recalcular a cada keystroke)
+  const {semAporte,semRevisao,comInviavel,comFollowUp,porSeg,patrimonioTotal,clientesAtivos}=useMemo(()=>{
+    const semAporte  =clientesComStatus.filter(c=>c._sAporte==="sem_aporte");
+    const semRevisao =clientesComStatus.filter(c=>c._sRevisao==="atrasada");
+    const comInviavel=clientesComStatus.filter(c=>c._inviavel);
+    const comFollowUp=clientesComStatus.filter(c=>c._followUp);
+    const porSeg={};
+    SEGS.forEach(s=>{porSeg[s]=[];});
+    clientesComStatus.forEach(c=>{
+      const s=segAuto(getPatFin(c));
+      if(porSeg[s])porSeg[s].push(c);
+    });
+    return{
+      semAporte,semRevisao,comInviavel,comFollowUp,porSeg,
+      patrimonioTotal:calcularPatrimonioTotal(clientesComStatus),
+      clientesAtivos:contarClientesAtivos(clientesComStatus),
+    };
+  },[clientesComStatus]);
 
   // Filtro inteligente
-  function aplicarFiltro(tipo){
-    if(filtroAtivo===tipo){setFiltroAtivo(null);return;}
-    setFiltroAtivo(tipo);
-    // Scroll suave para seção de clientes
+  const aplicarFiltro=useCallback((tipo)=>{
+    setFiltroAtivo(prev=>prev===tipo?null:tipo);
     setTimeout(()=>{
       clientesRef.current?.scrollIntoView({behavior:"smooth",block:"start"});
     },100);
-  }
+  },[]);
 
-  // Clientes filtrados para exibição na lista
-  function clientesFiltrados(){
+  // Clientes filtrados (memoizado: evita recomputar a cada render)
+  const clientesFiltrados=useMemo(()=>{
+    const termo=busca.trim().toLowerCase();
     let lista=clientesComStatus;
-    if(busca)lista=lista.filter(c=>c.nome?.toLowerCase().includes(busca.toLowerCase()));
+    if(termo)lista=lista.filter(c=>c.nome?.toLowerCase().includes(termo));
     if(filtroAtivo==="semAporte") lista=lista.filter(c=>c._sAporte==="sem_aporte");
     if(filtroAtivo==="semRevisao")lista=lista.filter(c=>c._sRevisao==="atrasada");
     if(filtroAtivo==="inviavel")  lista=lista.filter(c=>c._inviavel);
     if(filtroAtivo==="followUp")  lista=lista.filter(c=>c._followUp);
     return lista;
-  }
+  },[clientesComStatus,busca,filtroAtivo]);
 
   const hoje=new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
   const cW={maxWidth:760,margin:"0 auto"};
@@ -475,7 +477,7 @@ export default function Dashboard(){
         <div className="dashboard-cards-xp">
           <div className="card-xp">
             <div className="card-xp-label">Custódia Total</div>
-            <div className="card-xp-value">{brl(calcularPatrimonioTotal(clientes))}</div>
+            <div className="card-xp-value">{brl(patrimonioTotal)}</div>
             <div className="card-xp-subtitle">Total de {clientes.length} cliente{clientes.length!==1?"s":""}</div>
           </div>
 

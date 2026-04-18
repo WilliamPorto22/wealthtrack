@@ -195,6 +195,13 @@ function classNameToKey(name) {
 // ── Parser de relatório de investimentos ───────────────────────
 
 function parseRelatorio(text) {
+  // ── Normaliza ligaturas quebradas pelo pdfjs ──
+  // Ex.: "In fl ação" → "Inflação", "Gra fi co" → "Grafico", "fi ns" → "fins"
+  // PDFs com fonte que usa ligatures fi/fl/ff/ffi/ffl aparecem como espaços extras.
+  text = text
+    .replace(/([A-Za-zÀ-ÿ])\s(fi|fl|ffi|ffl|ff)\s([a-záéíóúãâêôç])/g, "$1$2$3")
+    .replace(/\b(fi|fl|ffi|ffl|ff)\s([a-záéíóúãâêôç])/g, "$1$2");
+
   const result = {};
   const nt = norm(text); // texto normalizado (sem acentos)
 
@@ -233,6 +240,12 @@ function parseRelatorio(text) {
   const rentAnoRE = [
     /RENTABILIDADE\s+(?:DO\s+)?ANO\s*:?\s*([-\d,]+)%/i,
     /RENT\.?\s*ANO\s*:?\s*([-\d,]+)%/i,
+    // Formato XP "Resumo": "ANO R$ 96.847,80 14,92%"
+    /\bANO\s+R\$\s*[\d.]+,\d{2}\s+([-\d,]+)%/i,
+    // Tabela "Referências" XP: "Portfólio 1,92% 14,92% 55,71% 84,85%" (Mês, Ano, 12M, 24M)
+    /PORTF.LIO\s+[-\d,]+%\s+([-\d,]+)%\s+[-\d,]+%\s+[-\d,]+%/i,
+    // Rentabilidade histórica XP: "2026 (No ano: 14,92%)"
+    /\(\s*NO\s+ANO[:\s]+([-\d,]+)%\s*\)/i,
   ];
   for (const re of rentAnoRE) {
     const m = nt.match(re);
@@ -248,9 +261,11 @@ function parseRelatorio(text) {
     const kpiChunk = nt.slice(kpiIdx, Math.min(nt.length, kpiIdx + 600));
     const rVals = [...kpiChunk.matchAll(/R\$\s*([\d.]+,\d{2})/g)];
     const pVals = [...kpiChunk.matchAll(/([-\d]+,\d{1,2})%(?![,\d])/g)];
+    // Se o cabeçalho XP lista "24M" em vez de "ANO", o 2º percentual NÃO é rent ano.
+    const kpiIs24M = /24\s*M|.LTIMOS\s*24/i.test(kpiChunk);
     if (!result._patrimonioTotal && rVals[0]) result._patrimonioTotal = parseBRL(rVals[0][1]);
     if (!result._rentMes  && pVals[0]) result._rentMes  = pVals[0][1].replace(",", ".");
-    if (!result._rentAno  && pVals[1]) result._rentAno  = pVals[1][1].replace(",", ".");
+    if (!result._rentAno  && pVals[1] && !kpiIs24M) result._rentAno  = pVals[1][1].replace(",", ".");
     if (!result._ganhoMes && rVals[1]) result._ganhoMes = parseBRL(rVals[1][1]);
   }
 
@@ -285,11 +300,17 @@ function parseRelatorio(text) {
   // SKIP: linhas que claramente são cabeçalhos ou rodapés
   const SKIP_RE = /^(?:POSI.{0,4}O\s+DETALHADA|PRECIFICA|Estrat.{0,3}gia|M.S\s+ATUAL|Refer.{0,4}ncia|ANO\b|24\s*MESES|Relat.{0,4}rio|Data\s+de|Aviso|\*|Gerado|Este\s+material)/i;
 
+  // SKIP tabelas que o parser de ativos confunde com ativos:
+  //   Evolução Patrimonial mensal: "mar./26   R$ 759.164,44   R$ 20.000,00 ..."
+  //   Movimentações: "27/03/2026   27/03/2026   Taxa de intermediação ..."
+  //   Rentabilidade histórica: linhas "Portfólio 6,46% 5,91% ..." / "YYYY %CDI ..."
+  const JUNK_RE = /^(?:[a-z]{3}\.?\/\d{2}\s+R\$|\d{2}\/\d{2}\/\d{4}\s+\d{2}\/\d{2}\/\d{4}|Portf.lio\s+[-\d,]+%|\d{4}\s+%CDI|CDI\s+[-\d,]+%|Ibovespa\s+[-\d,]+%|IPCA\s+[-\d,]+%|D.lar\s+[-\d,]+%|Benchmarks\b)/i;
+
   let currentClassKey = null;
 
   for (const line of lines) {
     const t = line.trim();
-    if (!t || SKIP_RE.test(t)) continue;
+    if (!t || SKIP_RE.test(t) || JUNK_RE.test(t)) continue;
     const nt_line = norm(t);
 
     // ── Detectar linha de composição: "ClassName (XX,XX%) R$ VALUE" ─

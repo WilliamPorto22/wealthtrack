@@ -43,7 +43,10 @@
       "Bash(ls *.json)",
       "Bash(grep -E \"\\\\.\\(jsx|js|json\\)$\")",
       "Bash(node _dump_pdf.mjs)",
-      "Bash(node _test_parse.mjs)"
+      "Bash(node _test_parse.mjs)",
+      "Bash(node _parser_test.mjs)",
+      "Bash(firebase hosting:channel:list)",
+      "Bash(xargs wc *)"
     ]
   }
 }

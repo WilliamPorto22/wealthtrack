@@ -1,17 +1,5 @@
-// Teste isolado do parser (sem pdfjs/tesseract imports)
 import fs from 'fs';
-
-// Reimplementa as funções locais pra rodar no Node sem o lib
-const coreSrc = fs.readFileSync('./_parser_core.js', 'utf-8');
-// Torna todas as funções disponíveis no escopo global
-const modSrc = coreSrc
-  .replace(/\bexport\s+(?:async\s+)?function/g, 'function')
-  .replace(/\bexport\s+/g, '');
-// Envolve e avalia
-const fn = new Function(modSrc + `
-  return { parseCarteiraFromText, parseRelatorio: typeof parseRelatorio === 'function' ? parseRelatorio : null, detectDocType };
-`);
-const { parseCarteiraFromText } = fn();
+import { parseCarteiraFromText } from './_parser_core.js';
 
 const text = fs.readFileSync('_xp_dump.txt', 'utf-8');
 const dados = parseCarteiraFromText(text);
@@ -65,6 +53,3 @@ console.log('  Inflação:           R$  84.325,69 (10,62%)');
 console.log('  Pré Fixado:         R$ 231.284,93 (29,14%)');
 console.log('  Renda Var. Brasil:  R$ 304.545,89 (38,37%)');
 console.log('  Alternativo:        R$  32.319,75 (4,07%)');
-console.log('  Caixa:              R$  20.175,38 (2,54%) — ignorado');
-console.log('  Proventos:          R$   1.586,60 (0,20%) — ignorado');
-console.log('  TOTAL investido:                           R$ 773.942,09 ≈ R$ 794.088,62 - caixa/proventos');
