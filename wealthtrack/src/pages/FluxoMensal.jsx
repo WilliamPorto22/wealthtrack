@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
@@ -11,8 +11,26 @@ function parseCentavos(s){ return parseInt(String(s||"0").replace(/\D/g,""))||0;
 function fmt(c){
   const n=parseCentavos(c);
   if(!n) return "";
-  return (n/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0,maximumFractionDigits:0});
+  return "R$ " + (n/100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 }
+
+// Input de moeda memoizado: estado local isola o foco do re-render do pai
+const InputMoeda = memo(function InputMoeda({ initValue, onCommit, placeholder="R$ 0,00", style }) {
+  const [raw,setRaw] = useState(initValue||"");
+  return (
+    <input
+      style={{...C.input,fontSize:13,padding:"12px 14px",...style}}
+      placeholder={placeholder}
+      inputMode="numeric"
+      value={fmt(raw)}
+      onChange={(e)=>{
+        const novo=e.target.value.replace(/\D/g,"");
+        setRaw(novo);
+        onCommit(novo);
+      }}
+    />
+  );
+});
 function fmtFull(v){
   if(!v||v<=0) return "—";
   return v.toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2});
@@ -244,22 +262,22 @@ export default function FluxoMensal() {
       <div style={{maxWidth:760,margin:"0 auto",padding:"28px 20px 80px"}}>
 
         {/* Header */}
-        <div style={{marginBottom:20,...noEdit}}>
-          <div style={{fontSize:10,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:4}}>Fluxo de Caixa Mensal</div>
-          <div style={{fontSize:22,fontWeight:300,color:T.textPrimary}}>{clienteNome||"Cliente"}</div>
+        <div style={{marginBottom:22,...noEdit}}>
+          <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.16em",marginBottom:6}}>Fluxo de Caixa Mensal</div>
+          <div style={{fontSize:24,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.01em"}}>{clienteNome||"Cliente"}</div>
         </div>
 
         {/* KPIs topo */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:18}}>
           {[
-            {l:"Renda Mensal",v:fmtFull(rendaEfetiva),cor:"#22c55e",bg:"rgba(34,197,94,0.07)",bd:"rgba(34,197,94,0.2)",sub:rendaFluxo>0?"declarado aqui":rendaExterna>0?"do cadastro":"—"},
-            {l:"Total de Gastos",v:fmtFull(totalGastos),cor:"#ef4444",bg:"rgba(239,68,68,0.07)",bd:"rgba(239,68,68,0.2)",sub:totalGastos>0?`${CATS.filter(c=>parseCentavos(form[c.key])>0).length} categorias`:"sem dados"},
-            {l:"Disponível",v:rendaEfetiva>0?fmtFull(sobra):"—",cor:sobra>=0?"#60a5fa":"#f59e0b",bg:sobra>=0?"rgba(96,165,250,0.07)":"rgba(245,158,11,0.07)",bd:sobra>=0?"rgba(96,165,250,0.2)":"rgba(245,158,11,0.2)",sub:rendaEfetiva>0?`${txPoupanca}% de poupança`:""},
+            {l:"Renda Mensal",v:fmtFull(rendaEfetiva),cor:"#22c55e",bd:"rgba(34,197,94,0.28)",sub:rendaFluxo>0?"declarado aqui":rendaExterna>0?"do cadastro":"—"},
+            {l:"Total de Gastos",v:fmtFull(totalGastos),cor:"#ef4444",bd:"rgba(239,68,68,0.28)",sub:totalGastos>0?`${CATS.filter(c=>parseCentavos(form[c.key])>0).length} categorias`:"sem dados"},
+            {l:"Disponível",v:rendaEfetiva>0?fmtFull(sobra):"—",cor:sobra>=0?"#60a5fa":"#f59e0b",bd:sobra>=0?"rgba(96,165,250,0.28)":"rgba(245,158,11,0.28)",sub:rendaEfetiva>0?`${txPoupanca}% de poupança`:""},
           ].map(k=>(
-            <div key={k.l} style={{background:k.bg,border:`0.5px solid ${k.bd}`,borderRadius:12,padding:"12px 10px",...noEdit}}>
-              <div style={{fontSize:8,color:k.cor,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,opacity:0.8}}>{k.l}</div>
-              <div style={{fontSize:13,color:k.cor,fontWeight:400,lineHeight:1.3,wordBreak:"break-all"}}>{k.v}</div>
-              {k.sub&&<div style={{fontSize:8,color:k.cor,opacity:0.55,marginTop:2}}>{k.sub}</div>}
+            <div key={k.l} style={{background:T.bgCard,border:`0.5px solid ${k.bd}`,borderRadius:T.radiusMd,padding:"14px 12px",boxShadow:T.shadowSm,...noEdit}}>
+              <div style={{fontSize:8,color:k.cor,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:6,opacity:0.85}}>{k.l}</div>
+              <div style={{fontSize:14,color:k.cor,fontWeight:400,lineHeight:1.3,wordBreak:"break-all"}}>{k.v}</div>
+              {k.sub&&<div style={{fontSize:8,color:k.cor,opacity:0.55,marginTop:3,letterSpacing:"0.04em"}}>{k.sub}</div>}
             </div>
           ))}
         </div>
@@ -273,13 +291,12 @@ export default function FluxoMensal() {
 
         {/* ── Seção renda (editar) ── */}
         {modo==="editar"&&(
-          <div style={{background:"rgba(34,197,94,0.04)",border:"0.5px solid rgba(34,197,94,0.18)",borderRadius:12,padding:"14px 16px",marginBottom:14}}>
-            <div style={{fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10,...noEdit}}>Renda Mensal</div>
+          <div style={{background:T.bgCard,border:`0.5px solid rgba(34,197,94,0.22)`,borderRadius:T.radiusLg,padding:"16px 18px",marginBottom:14,boxShadow:T.shadowSm}}>
+            <div style={{fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:12,...noEdit}}>Renda Mensal</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div>
                 <Lbl>Renda / Salário mensal</Lbl>
-                <input style={{...C.input,fontSize:13}} placeholder="R$ 0" value={fmt(form.renda)}
-                  onChange={e=>setF("renda",String(parseCentavos(e.target.value)))}/>
+                <InputMoeda initValue={form.renda} onCommit={(v)=>setF("renda",v)} placeholder="R$ 0,00"/>
                 {rendaExterna>0&&!rendaFluxo&&<div style={{fontSize:9,color:"#748CAB",marginTop:4,...noEdit}}>Cadastro: {fmtFull(rendaExterna)}</div>}
               </div>
             </div>
@@ -288,8 +305,8 @@ export default function FluxoMensal() {
 
         {/* ── Visão Visual: Donut + Legenda ── */}
         {totalGastos>0&&modo==="ver"&&(
-          <div style={{background:"rgba(255,255,255,0.02)",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:16,padding:"18px 16px",marginBottom:14}}>
-            <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:16,...noEdit}}>Distribuição de Gastos</div>
+          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:T.radiusLg,padding:"20px 18px",marginBottom:14,boxShadow:T.shadowSm}}>
+            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.16em",marginBottom:18,...noEdit}}>Distribuição de Gastos</div>
             <div style={{display:"flex",gap:20,alignItems:"center",flexWrap:"wrap"}}>
               <div style={{flexShrink:0}}>
                 <DonutGastos cats={CATS} form={form} total={totalGastos} size={180}/>
@@ -322,8 +339,8 @@ export default function FluxoMensal() {
         )}
 
         {/* ── Categorias ── */}
-        <div style={{background:"rgba(255,255,255,0.02)",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:16,padding:"18px 16px",marginBottom:14}}>
-          <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>
+        <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:T.radiusLg,padding:"20px 18px",marginBottom:14,boxShadow:T.shadowSm}}>
+          <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.16em",marginBottom:16,...noEdit}}>
             {modo==="editar"?"Editar categorias de gastos":"Gastos por categoria"}
           </div>
 
@@ -417,11 +434,10 @@ export default function FluxoMensal() {
                           <div style={{fontSize:9,color:"#748CAB"}}>{desc}</div>
                         </div>
                       </div>
-                      <input
-                        style={{...C.input,fontSize:13}}
-                        placeholder="R$ 0"
-                        value={fmt(form[key])}
-                        onChange={e=>setF(key,String(parseCentavos(e.target.value)))}
+                      <InputMoeda
+                        initValue={form[key]}
+                        onCommit={(v)=>setF(key,v)}
+                        placeholder="R$ 0,00"
                       />
                     </div>
                   )}
@@ -432,24 +448,26 @@ export default function FluxoMensal() {
 
           {/* Linha de gastos gerais manuais — só no editar, opcional */}
           {modo==="editar"&&(
-            <div style={{marginTop:12,padding:"12px 14px",background:"rgba(255,255,255,0.02)",border:"0.5px solid rgba(255,255,255,0.06)",borderRadius:10}}>
-              <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8,...noEdit}}>Ou informe apenas o total de gastos (sem detalhamento)</div>
-              <input style={{...C.input,fontSize:13}} placeholder="R$ total geral de gastos"
-                value={fmt(form._totalManual)}
-                onChange={e=>setF("_totalManual",String(parseCentavos(e.target.value)))}/>
-              <div style={{fontSize:9,color:"#748CAB",marginTop:5,...noEdit}}>Se preenchido, prevalece sobre os totais das categorias acima</div>
+            <div style={{marginTop:14,padding:"14px 16px",background:"rgba(255,255,255,0.03)",border:`0.5px solid ${T.border}`,borderRadius:T.radiusMd}}>
+              <div style={{fontSize:9,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:10,...noEdit}}>Ou informe apenas o total de gastos (sem detalhamento)</div>
+              <InputMoeda
+                initValue={form._totalManual}
+                onCommit={(v)=>setF("_totalManual",v)}
+                placeholder="R$ total geral de gastos"
+              />
+              <div style={{fontSize:9,color:"#748CAB",marginTop:6,...noEdit}}>Se preenchido, prevalece sobre os totais das categorias acima</div>
             </div>
           )}
         </div>
 
         {/* Total rodapé */}
         {totalGastos>0&&(
-          <div style={{background:"rgba(255,255,255,0.02)",border:"0.5px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,...noEdit}}>
+          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:T.radiusMd,padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,boxShadow:T.shadowSm,...noEdit}}>
             <div>
-              <div style={{fontSize:10,color:"#748CAB",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>Total de gastos no mês</div>
+              <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:4}}>Total de gastos no mês</div>
               {rendaEfetiva>0&&<div style={{fontSize:9,color:"#748CAB"}}>{Math.round(totalGastos/rendaEfetiva*100)}% da renda mensal</div>}
             </div>
-            <div style={{fontSize:22,color:"#ef4444",fontWeight:300}}>{fmtFull(totalGastos)}</div>
+            <div style={{fontSize:22,color:"#ef4444",fontWeight:300,letterSpacing:"-0.01em"}}>{fmtFull(totalGastos)}</div>
           </div>
         )}
 
