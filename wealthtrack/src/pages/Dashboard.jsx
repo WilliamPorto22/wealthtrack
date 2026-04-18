@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback, memo } from "react";
 import gsap from "gsap";
 import { useNavigate } from "react-router-dom";
 import { collection, getDocs } from "firebase/firestore";
@@ -164,8 +164,8 @@ export function AvatarIcon({tipo,size=32}){
   );
 }
 
-// Card cliente
-function ClientCard({c,onClick,sAporte,sRevisao,inviavel,followUp,sReserva}){
+// Card cliente (memoizado - não re-renderiza se props não mudarem)
+const ClientCard=memo(function ClientCard({c,onClick,sAporte,sRevisao,inviavel,followUp,sReserva}){
   const bordaAtencao=sAporte==="sem_aporte"||sRevisao==="atrasada"||followUp;
   const patFin=getPatFin(c);
   const [hov,setHov]=useState(false);
@@ -221,7 +221,7 @@ function ClientCard({c,onClick,sAporte,sRevisao,inviavel,followUp,sReserva}){
       </div>
     </div>
   );
-}
+});
 
 // Converte cotações da API para o formato do dashboard
 function formatarCotacoes(cotacoes) {
@@ -509,8 +509,8 @@ export default function Dashboard(){
                 {lista:semRevisao, cor:"#f59e0b", titulo:"Sem revisão",      filtro:"semRevisao", msg:"cliente(s) sem revisão no mês"},
                 {lista:comInviavel,cor:"#ef4444", titulo:"Plano inviável",   filtro:"inviavel",   msg:"cliente(s) com objetivo inviável"},
                 {lista:comFollowUp,cor:"#a855f7", titulo:"Follow-up vencido",filtro:"followUp",   msg:"cliente(s) com retorno atrasado"},
-              ].filter(a=>a.lista.length>0).map((a,i)=>(
-                <div key={i}
+              ].filter(a=>a.lista.length>0).map((a)=>(
+                <div key={a.filtro}
                   onClick={()=>aplicarFiltro(a.filtro)}
                   className="alert-card"
                   data-severity={a.cor === "#ef4444" ? "danger" : a.cor === "#f59e0b" ? "warning" : "info"}
@@ -561,7 +561,7 @@ export default function Dashboard(){
                 Exibindo: <span style={{color:"#F0EBD8"}}>
                   {{semAporte:"Sem aporte",semRevisao:"Sem reunião",inviavel:"Plano inviável",followUp:"Follow-up vencido"}[filtroAtivo]}
                 </span>
-                {" "}— {clientesFiltrados().length} cliente{clientesFiltrados().length!==1?"s":""}
+                {" "}— {clientesFiltrados.length} cliente{clientesFiltrados.length!==1?"s":""}
               </div>
             )}
           </div>
@@ -569,9 +569,9 @@ export default function Dashboard(){
           {/* LISTA FILTRADA */}
           {mostrarLista&&(
             <div className="grid-clients">
-              {clientesFiltrados().length===0
+              {clientesFiltrados.length===0
                 ?<div className="dashboard-no-results">Nenhum cliente encontrado.</div>
-                :clientesFiltrados().map(c=>(
+                :clientesFiltrados.map(c=>(
                   <ClientCard key={c.id} c={c} onClick={()=>nav(`/cliente/${c.id}`)}
                     sAporte={c._sAporte} sRevisao={c._sRevisao}
                     inviavel={c._inviavel} followUp={c._followUp} sReserva={c._sReserva}/>

@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
@@ -49,8 +49,9 @@ function calcularTabela(inicial, aporteMensal, anos) {
 }
 
 function classificar(anosNec, prazo) {
-  if (!anosNec) return "inviavel";
-  const diff = anosNec - prazo;
+  if (anosNec == null || !Number.isFinite(anosNec)) return "inviavel";
+  const p = Number(prazo) || 0;
+  const diff = anosNec - p;
   if (diff <= 0) return "viavel";
   if (diff <= 2) return "ajustavel";
   return "inviavel";
@@ -290,27 +291,24 @@ export default function Objetivos() {
   // ativos selecionados para este objetivo: Set de "classeKey::ativoId"
   const [ativosSelecionados, setAtivosSelecionados] = useState(new Set());
 
-  async function carregarCliente() {
+  const carregarCliente = useCallback(async () => {
     const snap = await getDoc(doc(db, "clientes", id));
     if (snap.exists()) {
       const data = snap.data();
       setObjetivos(data.objetivos || []);
       setCarteira(data.carteira || {});
     }
-  }
+  }, [id]);
 
+  // Carregar cliente no mount e ao voltar para a aba (sincroniza com outras páginas)
   useEffect(() => {
     carregarCliente();
-  }, [id]);
-
-  useEffect(() => {
-    function onFocus() { carregarCliente(); }
+    const onFocus = () => carregarCliente();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [id]);
+  }, [carregarCliente]);
 
   // Sempre que o tipo do objetivo mudar, pré-seleciona ativos já marcados
-  // com o rótulo correspondente na carteira.
   useEffect(() => {
     if (!form.tipo || !carteira) return;
     const existentes = ativosDoObjetivo(carteira, form.tipo);
@@ -328,21 +326,28 @@ export default function Objetivos() {
     setForm(f => ({ ...f, patrimAtual: String(Math.round(soma * 100)) }));
   }, [ativosSelecionados, patrimSource, carteira]);
 
-  // Obter IPCA dinâmico dos últimos 12 meses
+  // Obter IPCA dinâmico — cache em localStorage por 24h para não bater no BCB a cada load
   useEffect(() => {
-    async function obterDados() {
+    let cancelado = false;
+    (async () => {
       try {
+        const cache = JSON.parse(localStorage.getItem("wealthtrack_ipca") || "null");
+        const umDia = 24 * 60 * 60 * 1000;
+        if (cache && Date.now() - cache.ts < umDia && cache.valor) {
+          if (!cancelado) setIpca(parseFloat(cache.valor));
+          return;
+        }
         const dados = await obterIPCA();
-        if (dados?.valor) {
+        if (dados?.valor && !cancelado) {
           setIpca(parseFloat(dados.valor));
+          localStorage.setItem("wealthtrack_ipca", JSON.stringify({ valor: dados.valor, ts: Date.now() }));
         }
       } catch (erro) {
         console.error("Erro ao obter IPCA:", erro);
-        // Mantém valor padrão de 3.81%
       }
-    }
-    obterDados();
-  }, []);
+    })();
+    return () => { cancelado = true; };
+  }, [obterIPCA]);
 
   function setF(key, val) { setForm(f => ({ ...f, [key]: val })); }
 

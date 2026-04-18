@@ -4,6 +4,29 @@ import * as pdfjsLib from "pdfjs-dist";
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+// ── Tesseract worker reutilizável (evita recriar worker a cada página) ─
+let _tesseractWorker = null;
+async function getWorker(onLog) {
+  if (_tesseractWorker) return _tesseractWorker;
+  _tesseractWorker = await Tesseract.createWorker(["por", "eng"], 1, {
+    logger: onLog,
+  });
+  return _tesseractWorker;
+}
+async function terminateWorker() {
+  if (_tesseractWorker) {
+    try { await _tesseractWorker.terminate(); } catch {}
+    _tesseractWorker = null;
+  }
+}
+
+// Libera canvas (importante em Safari/Firefox onde GC não coleta rápido)
+function disposeCanvas(canvas) {
+  if (!canvas) return;
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
 // ── Extração de texto com linhas preservadas ───────────────────
 
 export async function extractText(file, onProgress) {
@@ -14,87 +37,107 @@ export async function extractText(file, onProgress) {
     return await _fromImage(file, onProgress);
   } catch (err) {
     throw new Error(`Falha ao ler o arquivo: ${err.message}`);
+  } finally {
+    // Libera worker após uso — evita vazamento de memória entre uploads
+    await terminateWorker();
   }
 }
 
 async function _fromPDF(file, onProgress) {
   onProgress(5, "Carregando PDF...");
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  const n = pdf.numPages;
-  let text = "";
-  let hasText = false;
+  const pdfTask = pdfjsLib.getDocument({ data: buf });
+  const pdf = await pdfTask.promise;
+  try {
+    const n = pdf.numPages;
+    let text = "";
+    let hasText = false;
 
-  onProgress(10, `PDF com ${n} página${n > 1 ? "s" : ""} detectado...`);
+    onProgress(10, `PDF com ${n} página${n > 1 ? "s" : ""} detectado...`);
 
-  for (let i = 1; i <= n; i++) {
-    onProgress(10 + Math.round((i / n) * 55), `Lendo página ${i} de ${n}...`);
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const items = content.items.filter(it => it.str && it.str.trim());
-    if (items.length === 0) { text += "\n"; continue; }
+    for (let i = 1; i <= n; i++) {
+      onProgress(10 + Math.round((i / n) * 55), `Lendo página ${i} de ${n}...`);
+      const page = await pdf.getPage(i);
+      try {
+        const content = await page.getTextContent();
+        const items = content.items.filter(it => it.str && it.str.trim());
+        if (items.length === 0) { text += "\n"; continue; }
 
-    // Agrupa por Y (topo→base) preservando linhas reais
-    const lineMap = new Map();
-    for (const item of items) {
-      const y = Math.round(item.transform[5]);
-      if (!lineMap.has(y)) lineMap.set(y, []);
-      lineMap.get(y).push({ x: item.transform[4], str: item.str });
-    }
+        // Agrupa por Y (topo→base) preservando linhas reais
+        const lineMap = new Map();
+        for (const item of items) {
+          const y = Math.round(item.transform[5]);
+          if (!lineMap.has(y)) lineMap.set(y, []);
+          lineMap.get(y).push({ x: item.transform[4], str: item.str });
+        }
 
-    const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
-    const merged = [];
-    for (const y of sortedYs) {
-      const prev = merged[merged.length - 1];
-      // Aumentado para 8 para ser mais tolerante com alinhamento de colunas
-      if (prev && Math.abs(y - prev.y) < 8) {
-        prev.items.push(...lineMap.get(y));
-      } else {
-        merged.push({ y, items: [...lineMap.get(y)] });
+        const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
+        const merged = [];
+        for (const y of sortedYs) {
+          const prev = merged[merged.length - 1];
+          if (prev && Math.abs(y - prev.y) < 8) {
+            prev.items.push(...lineMap.get(y));
+          } else {
+            merged.push({ y, items: [...lineMap.get(y)] });
+          }
+        }
+
+        const pageText = merged
+          .map(({ items: its }) => {
+            its.sort((a, b) => a.x - b.x);
+            return its.map(it => it.str).join(" ").trim();
+          })
+          .filter(l => l.length > 0)
+          .join("\n");
+
+        if (pageText.trim().length > 20) hasText = true;
+        text += pageText + "\n\n";
+      } finally {
+        // Libera recursos internos da página (pdf.js mantém cache por página)
+        page.cleanup?.();
       }
     }
 
-    const pageText = merged
-      .map(({ items: its }) => {
-        its.sort((a, b) => a.x - b.x);
-        return its.map(it => it.str).join(" ").trim();
-      })
-      .filter(l => l.length > 0)
-      .join("\n");
-
-    if (pageText.trim().length > 20) hasText = true;
-    text += pageText + "\n\n";
-  }
-
-  if (!hasText) {
-    text = "";
-    onProgress(66, "PDF digitalizado — iniciando OCR...");
-    for (let i = 1; i <= n; i++) {
-      onProgress(66 + Math.round((i / n) * 24), `OCR página ${i} de ${n}...`);
-      const page = await pdf.getPage(i);
-      const vp = page.getViewport({ scale: 2 });
-      const canvas = document.createElement("canvas");
-      canvas.width = vp.width; canvas.height = vp.height;
-      await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
-      const result = await Tesseract.recognize(canvas, ["por", "eng"]);
-      text += result.data.text + "\n\n";
+    if (!hasText) {
+      text = "";
+      onProgress(66, "PDF digitalizado — iniciando OCR...");
+      const worker = await getWorker();
+      for (let i = 1; i <= n; i++) {
+        onProgress(66 + Math.round((i / n) * 24), `OCR página ${i} de ${n}...`);
+        const page = await pdf.getPage(i);
+        let canvas = null;
+        try {
+          const vp = page.getViewport({ scale: 2 });
+          canvas = document.createElement("canvas");
+          canvas.width = vp.width;
+          canvas.height = vp.height;
+          await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+          const result = await worker.recognize(canvas);
+          text += result.data.text + "\n\n";
+        } finally {
+          disposeCanvas(canvas);
+          page.cleanup?.();
+        }
+      }
     }
-  }
 
-  onProgress(92, "Analisando dados financeiros...");
-  // Log para debug no console do navegador
-  console.log("[WealthTrack] Texto extraído do PDF (primeiros 3000 chars):\n", text.slice(0, 3000));
-  return text;
+    onProgress(92, "Analisando dados financeiros...");
+    console.log("[WealthTrack] Texto extraído do PDF (primeiros 3000 chars):\n", text.slice(0, 3000));
+    return text;
+  } finally {
+    // Destrói o documento pdf.js para liberar toda memória mantida
+    try { await pdf.cleanup(); } catch {}
+    try { await pdf.destroy(); } catch {}
+  }
 }
 
 async function _fromImage(file, onProgress) {
   onProgress(5, "Iniciando OCR...");
-  const result = await Tesseract.recognize(file, ["por", "eng"], {
-    logger: m => {
-      if (m.status === "recognizing text")
-        onProgress(5 + Math.round(m.progress * 85), `OCR: ${Math.round(m.progress * 100)}%`);
-    },
+  const worker = await getWorker(m => {
+    if (m.status === "recognizing text")
+      onProgress(5 + Math.round(m.progress * 85), `OCR: ${Math.round(m.progress * 100)}%`);
   });
+  const result = await worker.recognize(file);
   onProgress(92, "Analisando dados financeiros...");
   return result.data.text;
 }
