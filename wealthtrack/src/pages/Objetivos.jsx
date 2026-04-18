@@ -5,6 +5,7 @@ import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
 import { T, C } from "../theme";
 import { useCotacoesReais } from "../services/cotacoesReais";
+import { listarAtivosCarteira, ativosDoObjetivo, atualizarVinculoAtivos, TIPO_OBJETIVO_PARA_LABEL } from "../utils/ativos";
 
 const IPCA_ANUAL = 3.81;
 const TAXA_ANUAL = 14;
@@ -119,25 +120,190 @@ const emojisPorTipo = {
   personalizado: "⭐"
 };
 
+// ── Componente: Seletor de ativos para vincular ao objetivo ──
+function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, totalCalculado }) {
+  const todos = listarAtivosCarteira(carteira);
+  const label = TIPO_OBJETIVO_PARA_LABEL[tipoObjetivo];
+
+  if (todos.length === 0) {
+    return (
+      <div style={{
+        background: "rgba(240,162,2,0.05)",
+        border: `0.5px solid ${T.goldBorder}`,
+        borderRadius: T.radiusMd,
+        padding: "16px 18px",
+        marginBottom: 20,
+      }}>
+        <div style={{ fontSize: 12, color: T.gold, marginBottom: 6, fontWeight: 500 }}>
+          Nenhum ativo cadastrado na carteira
+        </div>
+        <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.7 }}>
+          Cadastre seus investimentos em "Carteira" para poder vincular ativos específicos a este objetivo.
+          Ou use o modo "Valor manual" acima.
+        </div>
+      </div>
+    );
+  }
+
+  // Agrupa sugeridos (os que já têm o rótulo deste objetivo) e demais
+  const sugeridos = todos.filter(a => (a.objetivo || "") === label);
+  const demais = todos.filter(a => (a.objetivo || "") !== label);
+
+  function toggle(a) {
+    const k = `${a.classeKey}::${a.id}`;
+    const n = new Set(selecionados);
+    if (n.has(k)) n.delete(k); else n.add(k);
+    setSelecionados(n);
+  }
+
+  const LinhaAtivo = ({ a }) => {
+    const k = `${a.classeKey}::${a.id}`;
+    const marcado = selecionados.has(k);
+    return (
+      <div
+        onClick={() => toggle(a)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "10px 12px",
+          background: marcado ? "rgba(240,162,2,0.08)" : "rgba(255,255,255,0.02)",
+          border: marcado ? `0.5px solid ${T.goldBorder}` : `0.5px solid ${T.border}`,
+          borderRadius: T.radiusSm,
+          cursor: "pointer",
+          transition: "all 0.15s",
+        }}
+      >
+        <div style={{
+          width: 16, height: 16, borderRadius: 4,
+          background: marcado ? T.gold : "transparent",
+          border: marcado ? `1px solid ${T.gold}` : `1px solid ${T.textMuted}`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+          color: T.bg, fontSize: 11, fontWeight: 700,
+        }}>
+          {marcado ? "✓" : ""}
+        </div>
+        <div style={{ width: 4, height: 22, borderRadius: 2, background: a.classeCor, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, color: T.textPrimary, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {a.nome || "Ativo sem nome"}
+          </div>
+          <div style={{ fontSize: 10, color: T.textMuted, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span>{a.classeLabel}</span>
+            {a.objetivo && a.objetivo !== label && (
+              <span style={{ color: T.warning }}>· já vinculado a "{a.objetivo}"</span>
+            )}
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: marcado ? T.gold : T.textSecondary, fontWeight: 600, flexShrink: 0 }}>
+          {a.valorReais.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      {/* Header com total */}
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        background: "rgba(240,162,2,0.05)",
+        border: `0.5px solid ${T.goldBorder}`,
+        borderRadius: T.radiusMd,
+        padding: "12px 16px",
+        marginBottom: 12,
+      }}>
+        <div>
+          <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>
+            {selecionados.size} {selecionados.size === 1 ? "ativo vinculado" : "ativos vinculados"}
+          </div>
+          <div style={{ fontSize: 18, color: T.gold, fontWeight: 600 }}>
+            {totalCalculado.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: T.textMuted, textAlign: "right", lineHeight: 1.5 }}>
+          Patrimônio<br />
+          somado dos ativos
+        </div>
+      </div>
+
+      {sugeridos.length > 0 && (
+        <>
+          <div style={{ fontSize: 9, color: T.gold, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>
+            Sugeridos — já marcados como "{label}"
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+            {sugeridos.map(a => <LinhaAtivo key={`${a.classeKey}-${a.id}`} a={a} />)}
+          </div>
+        </>
+      )}
+
+      {demais.length > 0 && (
+        <>
+          <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
+            {sugeridos.length > 0 ? "Outros ativos da carteira" : "Ativos da carteira"}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto" }}>
+            {demais.map(a => <LinhaAtivo key={`${a.classeKey}-${a.id}`} a={a} />)}
+          </div>
+        </>
+      )}
+
+      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 12, lineHeight: 1.6 }}>
+        Os ativos selecionados serão marcados na sua carteira com o objetivo "{label}" e contabilizados como patrimônio deste plano.
+      </div>
+    </div>
+  );
+}
+
 export default function Objetivos() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { obterIPCA } = useCotacoesReais();
   const [objetivos, setObjetivos] = useState([]);
+  const [carteira, setCarteira] = useState({});
   const [selecionado, setSelecionado] = useState(null);
   const [etapa, setEtapa] = useState(0);
   const [form, setForm] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [recalibrar, setRecalibrar] = useState(null);
   const [ipca, setIpca] = useState(3.81);
+  // modo de preenchimento do patrimônio: 'manual' | 'ativos'
+  const [patrimSource, setPatrimSource] = useState("manual");
+  // ativos selecionados para este objetivo: Set de "classeKey::ativoId"
+  const [ativosSelecionados, setAtivosSelecionados] = useState(new Set());
 
   useEffect(() => {
     async function carregar() {
       const snap = await getDoc(doc(db, "clientes", id));
-      if (snap.exists()) setObjetivos(snap.data().objetivos || []);
+      if (snap.exists()) {
+        const data = snap.data();
+        setObjetivos(data.objetivos || []);
+        setCarteira(data.carteira || {});
+      }
     }
     carregar();
   }, [id]);
+
+  // Sempre que o tipo do objetivo mudar, pré-seleciona ativos já marcados
+  // com o rótulo correspondente na carteira.
+  useEffect(() => {
+    if (!form.tipo || !carteira) return;
+    const existentes = ativosDoObjetivo(carteira, form.tipo);
+    setAtivosSelecionados(new Set(existentes.map(a => `${a.classeKey}::${a.id}`)));
+  }, [form.tipo, carteira]);
+
+  // Recalcula patrimAtual automaticamente quando em modo "ativos"
+  useEffect(() => {
+    if (patrimSource !== "ativos") return;
+    const todos = listarAtivosCarteira(carteira);
+    const soma = todos.reduce((acc, a) => {
+      const k = `${a.classeKey}::${a.id}`;
+      return acc + (ativosSelecionados.has(k) ? a.valorReais : 0);
+    }, 0);
+    setForm(f => ({ ...f, patrimAtual: String(Math.round(soma * 100)) }));
+  }, [ativosSelecionados, patrimSource, carteira]);
 
   // Obter IPCA dinâmico dos últimos 12 meses
   useEffect(() => {
@@ -166,12 +332,32 @@ export default function Objetivos() {
   async function salvar() {
     setSalvando(true);
     const snap = await getDoc(doc(db, "clientes", id));
-    const lista = [...objetivos, form];
-    await setDoc(doc(db, "clientes", id), { ...snap.data(), objetivos: lista });
+    const dados = snap.data() || {};
+    const selecaoList = [...ativosSelecionados].map(k => {
+      const [classeKey, ativoId] = k.split("::");
+      return { classeKey, ativoId };
+    });
+    const objComVinculos = {
+      ...form,
+      patrimSource,
+      ativosVinculados: patrimSource === "ativos" ? selecaoList : [],
+    };
+    const lista = [...objetivos, objComVinculos];
+    const novaCarteira = patrimSource === "ativos"
+      ? atualizarVinculoAtivos(dados.carteira || {}, form.tipo, selecaoList)
+      : dados.carteira;
+    await setDoc(doc(db, "clientes", id), {
+      ...dados,
+      objetivos: lista,
+      ...(novaCarteira ? { carteira: novaCarteira } : {}),
+    });
     setObjetivos(lista);
+    if (novaCarteira) setCarteira(novaCarteira);
     setSelecionado(null);
     setEtapa(0);
     setForm({});
+    setPatrimSource("manual");
+    setAtivosSelecionados(new Set());
     setSalvando(false);
   }
 
@@ -603,19 +789,73 @@ export default function Objetivos() {
             <div style={{ fontSize:20, fontWeight:300, color:T.textPrimary, marginBottom:8, lineHeight:1.3 }}>
               Qual é a situação atual?
             </div>
-            <div style={{ fontSize:13, color:T.textSecondary, marginBottom:28, lineHeight:1.7 }}>
+            <div style={{ fontSize:13, color:T.textSecondary, marginBottom:20, lineHeight:1.7 }}>
               Esses dados são a base do cálculo.
               Quanto mais preciso, melhor o diagnóstico.
             </div>
-            <div style={{ marginBottom:16 }}>
-              <label style={C.label}>Patrimônio já acumulado para este objetivo</label>
-              <input style={{ ...C.input, fontSize:16, padding:"14px 16px" }} placeholder="R$ 0" type="text" inputMode="numeric"
-                value={form.patrimAtual ? (parseCentavos(form.patrimAtual)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0,maximumFractionDigits:0}) : ""}
-                onChange={e => {
-                  const centavos = parseCentavos(e.target.value) * 100;
-                  setF("patrimAtual", String(centavos));
-                }} />
+
+            <label style={C.label}>Patrimônio já acumulado para este objetivo</label>
+            {/* Toggle Manual / Ativos Financeiros */}
+            <div style={{ display:"flex", gap:0, background:"rgba(255,255,255,0.03)", border:`0.5px solid ${T.border}`, borderRadius:T.radiusMd, padding:3, marginBottom:14 }}>
+              {[
+                { key:"manual", label:"Valor manual" },
+                { key:"ativos", label:"Ativos financeiros" },
+              ].map(opt => {
+                const ativo = patrimSource === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => {
+                      setPatrimSource(opt.key);
+                      if (opt.key === "manual") {
+                        setAtivosSelecionados(new Set());
+                      }
+                    }}
+                    style={{
+                      flex:1,
+                      padding:"10px 12px",
+                      background: ativo ? T.goldDim : "transparent",
+                      border: ativo ? `1px solid ${T.goldBorder}` : "1px solid transparent",
+                      borderRadius:T.radiusSm,
+                      color: ativo ? T.gold : T.textSecondary,
+                      fontSize:11,
+                      letterSpacing:"0.08em",
+                      textTransform:"uppercase",
+                      cursor:"pointer",
+                      fontFamily:T.fontFamily,
+                      transition:"all 0.2s",
+                      fontWeight: ativo ? 600 : 400,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
+
+            {patrimSource === "manual" ? (
+              <div style={{ marginBottom:20 }}>
+                <input style={{ ...C.input, fontSize:16, padding:"14px 16px" }} placeholder="R$ 0" type="text" inputMode="numeric"
+                  value={form.patrimAtual ? (parseCentavos(form.patrimAtual)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0,maximumFractionDigits:0}) : ""}
+                  onChange={e => {
+                    const centavos = parseCentavos(e.target.value) * 100;
+                    setF("patrimAtual", String(centavos));
+                  }} />
+                <div style={{ fontSize:11, color:T.textMuted, marginTop:8, lineHeight:1.6 }}>
+                  Preencha o valor que você já reservou para este objetivo. Se ainda não tem ativos dedicados, use este campo.
+                </div>
+              </div>
+            ) : (
+              <AtivosPicker
+                carteira={carteira}
+                tipoObjetivo={form.tipo}
+                selecionados={ativosSelecionados}
+                setSelecionados={setAtivosSelecionados}
+                totalCalculado={inicial}
+              />
+            )}
+
             <div style={{ marginBottom:16 }}>
               <label style={C.label}>Aporte mensal destinado a este objetivo</label>
               <input style={{ ...C.input, fontSize:16, padding:"14px 16px" }} placeholder="R$ 0" type="text" inputMode="numeric"
@@ -726,12 +966,39 @@ export default function Objetivos() {
               Voltar
             </button>
           )}
-          {etapa < 4 && (
-            <button style={{ flex:1, padding:"14px", background:T.goldDim, border:`1px solid ${T.goldBorder}`, borderRadius:T.radiusMd, color:T.gold, cursor:"pointer", fontSize:11, letterSpacing:"0.18em", textTransform:"uppercase", fontFamily:T.fontFamily }}
-              onClick={() => setEtapa(e => e + 1)} disabled={etapa===1 && !form.meta}>
-              Próximo
-            </button>
-          )}
+          {etapa < 4 && (() => {
+            const bloqueadoEtapa1 = etapa === 1 && !form.meta;
+            const semPatrim = parseCentavos(form.patrimAtual) <= 0;
+            const semAtivos = ativosSelecionados.size === 0;
+            const bloqueadoEtapa2 = etapa === 2 && (
+              patrimSource === "manual" ? semPatrim : semAtivos
+            );
+            const bloqueado = bloqueadoEtapa1 || bloqueadoEtapa2;
+            return (
+              <button
+                style={{
+                  flex:1, padding:"14px",
+                  background: bloqueado ? "rgba(255,255,255,0.03)" : T.goldDim,
+                  border: bloqueado ? `1px solid ${T.border}` : `1px solid ${T.goldBorder}`,
+                  borderRadius:T.radiusMd,
+                  color: bloqueado ? T.textMuted : T.gold,
+                  cursor: bloqueado ? "not-allowed" : "pointer",
+                  fontSize:11, letterSpacing:"0.18em", textTransform:"uppercase", fontFamily:T.fontFamily
+                }}
+                onClick={() => { if (!bloqueado) setEtapa(e => e + 1); }}
+                disabled={bloqueado}
+                title={
+                  bloqueadoEtapa2 && patrimSource === "ativos"
+                    ? "Selecione pelo menos um ativo ou troque para valor manual"
+                    : bloqueadoEtapa2
+                    ? "Informe o patrimônio já acumulado ou vincule ativos financeiros"
+                    : undefined
+                }
+              >
+                Próximo
+              </button>
+            );
+          })()}
           {etapa === 4 && (
             <button style={{ flex:1, padding:"14px", background:T.goldDim, border:`1px solid ${T.goldBorder}`, borderRadius:T.radiusMd, color:T.gold, cursor:"pointer", fontSize:11, letterSpacing:"0.18em", textTransform:"uppercase", fontFamily:T.fontFamily }}
               onClick={salvar} disabled={salvando}>

@@ -11,6 +11,12 @@ import {
   calcularProjecao,
   classificarStatus,
 } from "../utils/objetivosCalc";
+import {
+  listarAtivosCarteira,
+  ativosDoObjetivo,
+  atualizarVinculoAtivos,
+  TIPO_OBJETIVO_PARA_LABEL,
+} from "../utils/ativos";
 
 function parseCentavos(s) { return parseInt(String(s || "0").replace(/\D/g, "")) || 0; }
 function moeda(c) {
@@ -86,6 +92,11 @@ export default function ObjetivoDetalhes() {
   const [formEditMes, setFormEditMes] = useState({});
   const [salvandoMes, setSalvandoMes] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState(false);
+
+  // Ativos — vincular novos da carteira
+  const [modalAtivos, setModalAtivos] = useState(false);
+  const [selecaoAtivos, setSelecaoAtivos] = useState(new Set());
+  const [salvandoAtivos, setSalvandoAtivos] = useState(false);
 
   useEffect(() => {
     async function carregar() {
@@ -167,6 +178,36 @@ export default function ObjetivoDetalhes() {
   const rentabilidadeMediaHistorico = historico.length > 0
     ? historico.reduce((s, h) => s + (h.rentabilidadeCarteira || 0), 0) / historico.length
     : null;
+
+  async function salvarVinculoAtivos(novaSelecao) {
+    setSalvandoAtivos(true);
+    try {
+      const snap = await getDoc(doc(db, "clientes", clienteId));
+      if (snap.exists()) {
+        const dadosCliente = snap.data();
+        const selList = [...novaSelecao].map(k => {
+          const [classeKey, ativoId] = k.split("::");
+          return { classeKey, ativoId };
+        });
+        const novaCarteira = atualizarVinculoAtivos(dadosCliente.carteira || {}, objetivo.tipo, selList);
+        // Atualiza também o campo ativosVinculados do objetivo
+        const objs = [...(dadosCliente.objetivos || [])];
+        const idx = parseInt(objetivoIndex);
+        objs[idx] = { ...objs[idx], ativosVinculados: selList, patrimSource: "ativos" };
+        await setDoc(doc(db, "clientes", clienteId), {
+          ...dadosCliente,
+          carteira: novaCarteira,
+          objetivos: objs,
+        });
+        setCliente({ ...dadosCliente, carteira: novaCarteira, objetivos: objs });
+        setObjetivo(objs[idx]);
+      }
+    } catch (e) {
+      console.error("Erro ao salvar vínculo de ativos:", e);
+    }
+    setSalvandoAtivos(false);
+    setModalAtivos(false);
+  }
 
   async function salvarMesHistorico(mesAnoKey, dados) {
     setSalvandoMes(true);
@@ -388,9 +429,9 @@ export default function ObjetivoDetalhes() {
     const infoPorTipo = {
       aposentadoria: {
         headline: "Independência Financeira",
-        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para viver de renda passiva, sem depender de renda ativa. Juros compostos com meta de ${TAXA_ANUAL}% ao ano real sobre aportes de ${brl(aporte)}/mês.`,
+        descricao: (<>{`Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para viver de renda passiva, sem depender de renda ativa.`}<br />{`Juros compostos com meta de ${TAXA_ANUAL}% ao ano real sobre aportes de ${brl(aporte)}/mês.`}</>),
         insight: status === "viavel"
-          ? `Plano no caminho certo — meta atingível em ${anosNec} anos. Renda mensal estimada ao final: ${brl(projecao.at(-1)?.rendaMensalReal)}.`
+          ? `Plano no caminho certo. Meta atingível em ${anosNec} anos. Renda mensal estimada ao final: ${brl(projecao.at(-1)?.rendaMensalReal)}.`
           : `Para atingir ${brl(meta)} em ${prazo} anos, é necessário ajustar o aporte ou o prazo. Veja as Estratégias.`,
       },
       imovel: {
@@ -450,10 +491,12 @@ export default function ObjetivoDetalhes() {
         <div style={{
           background: `linear-gradient(135deg, ${corTipo}12, ${corTipo}06)`,
           border: `0.5px solid ${corTipo}30`,
-          borderLeft: `3px solid ${corTipo}`,
           borderRadius: T.radiusMd,
-          padding: "20px 22px",
+          padding: "22px 32px",
           marginBottom: 20,
+          maxWidth: 680,
+          margin: "0 auto 20px",
+          textAlign: "center",
         }}>
           <div style={{ fontSize: 10, color: corTipo, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>
             {labelTipoPorTipo[objetivo.tipo] || "Objetivo"}
@@ -1380,41 +1423,350 @@ export default function ObjetivoDetalhes() {
   };
 
   // ── ATIVOS ──
-  const Ativos = () => (
-    <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
-      <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 16, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
-        Ativos Vinculados a Este Objetivo
-      </div>
-      <div style={{
-        background: "rgba(255,255,255,0.02)",
-        border: `0.5px solid ${T.border}`,
-        borderRadius: T.radiusMd,
-        padding: "32px 24px",
-        textAlign: "center",
-      }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>💼</div>
-        <div style={{ fontSize: 14, color: T.textPrimary, marginBottom: 8, fontWeight: 500 }}>
-          Nenhum ativo vinculado ainda
+  const Ativos = () => {
+    const carteira = cliente?.carteira || {};
+    const vinculados = ativosDoObjetivo(carteira, objetivo.tipo);
+    const labelAtivo = TIPO_OBJETIVO_PARA_LABEL[objetivo.tipo];
+    const todosAtivos = listarAtivosCarteira(carteira);
+    const totalVinculado = vinculados.reduce((s, a) => s + (a.valorReais || 0), 0);
+
+    const rentAnoSoma = vinculados.reduce((acc, a) => acc + (parseFloat(String(a.rentAno || "0").replace(",", ".")) || 0) * (a.valorReais || 0), 0);
+    const rentMedia12 = totalVinculado > 0 ? rentAnoSoma / totalVinculado : 0;
+    const rentMesSoma = vinculados.reduce((acc, a) => acc + (parseFloat(String(a.rentMes || "0").replace(",", ".")) || 0) * (a.valorReais || 0), 0);
+    const rentMediaMes = totalVinculado > 0 ? rentMesSoma / totalVinculado : 0;
+
+    const abrirModal = () => {
+      setSelecaoAtivos(new Set(vinculados.map(a => `${a.classeKey}::${a.id}`)));
+      setModalAtivos(true);
+    };
+
+    if (vinculados.length === 0) {
+      return (
+        <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+              Ativos Vinculados a Este Objetivo
+            </div>
+            {todosAtivos.length > 0 && (
+              <button
+                onClick={abrirModal}
+                style={{ padding: "8px 14px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusSm, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+              >
+                + Vincular ativos
+              </button>
+            )}
+          </div>
+          <div style={{
+            background: "rgba(255,255,255,0.02)",
+            border: `0.5px solid ${T.border}`,
+            borderRadius: T.radiusMd,
+            padding: "32px 24px",
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>💼</div>
+            <div style={{ fontSize: 14, color: T.textPrimary, marginBottom: 8, fontWeight: 500 }}>
+              Nenhum ativo vinculado ainda
+            </div>
+            <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.8, marginBottom: 16 }}>
+              {todosAtivos.length === 0
+                ? <>Cadastre seus investimentos em <strong style={{ color: T.gold }}>Carteira</strong> e marque-os com o objetivo <strong>"{labelAtivo}"</strong> para visualizar o desempenho real aqui.</>
+                : <>Você tem <strong style={{ color: T.textPrimary }}>{todosAtivos.length}</strong> ativo{todosAtivos.length > 1 ? "s" : ""} na carteira. Clique em "+ Vincular ativos" para selecionar quais pertencem a este objetivo.</>
+              }
+            </div>
+            {todosAtivos.length > 0 && (
+              <button
+                onClick={abrirModal}
+                style={{ padding: "10px 18px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusMd, color: T.gold, fontSize: 12, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.08em" }}
+              >
+                Vincular ativos da carteira
+              </button>
+            )}
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.7 }}>
-          Quando você vincular ativos da sua carteira de investimentos a este objetivo,<br />
-          você poderá acompanhar o desempenho e a rentabilidade real em tempo real aqui.
+      );
+    }
+
+    return (
+      <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+            Ativos Vinculados a Este Objetivo
+          </div>
+          <button
+            onClick={abrirModal}
+            style={{ padding: "8px 14px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusSm, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+          >
+            Gerenciar vínculos
+          </button>
+        </div>
+
+        {/* KPIs */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+          {[
+            { label: "Total Vinculado", valor: brl(totalVinculado), color: corTipo },
+            { label: "Ativos", valor: `${vinculados.length}`, color: T.textPrimary },
+            { label: "Rent. Média 12m", valor: `${rentMedia12.toFixed(2)}%`, color: rentMedia12 >= 0 ? "#22c55e" : "#ef4444" },
+            { label: "Rent. Média no Mês", valor: `${rentMediaMes.toFixed(2)}%`, color: rentMediaMes >= 0 ? "#22c55e" : "#ef4444" },
+          ].map(({ label, valor, color }, i) => (
+            <div key={i} style={{
+              background: "rgba(255,255,255,0.025)",
+              border: `0.5px solid ${T.border}`,
+              borderRadius: T.radiusMd,
+              padding: "14px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 15, color, fontWeight: 600, lineHeight: 1.2 }}>
+                {valor}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabela de ativos */}
+        <div style={{
+          background: "rgba(255,255,255,0.02)",
+          border: `0.5px solid ${T.border}`,
+          borderRadius: T.radiusMd,
+          overflow: "hidden",
+          marginBottom: 16,
+        }}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 720 }}>
+              <thead>
+                <tr style={{ borderBottom: `0.5px solid ${T.border}`, background: "rgba(255,255,255,0.025)" }}>
+                  {[
+                    { h: "Ativo", align: "left" },
+                    { h: "Classe", align: "left" },
+                    { h: "Valor", align: "right" },
+                    { h: "% do Objetivo", align: "right" },
+                    { h: "Rent. Mês", align: "right" },
+                    { h: "Rent. 12m", align: "right" },
+                    { h: "Vencimento", align: "right" },
+                  ].map((c, i) => (
+                    <th key={i} style={{
+                      padding: "11px 14px",
+                      textAlign: c.align,
+                      fontSize: 10, color: T.textMuted, fontWeight: 500, letterSpacing: "0.08em",
+                      whiteSpace: "nowrap",
+                    }}>{c.h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {vinculados.map((a) => {
+                  const pct = totalVinculado > 0 ? (a.valorReais / totalVinculado) * 100 : 0;
+                  const rMes = parseFloat(String(a.rentMes || "0").replace(",", "."));
+                  const rAno = parseFloat(String(a.rentAno || "0").replace(",", "."));
+                  return (
+                    <tr key={`${a.classeKey}-${a.id}`} style={{ borderBottom: `0.5px solid ${T.border}` }}>
+                      <td style={{ padding: "12px 14px", fontSize: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 3, height: 22, borderRadius: 2, background: a.classeCor, flexShrink: 0 }} />
+                          <div>
+                            <div style={{ color: T.textPrimary, fontWeight: 500 }}>{a.nome || "Ativo sem nome"}</div>
+                            {a.segmento && (
+                              <div style={{ fontSize: 9, color: T.textMuted, marginTop: 2 }}>{a.segmento}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 14px", fontSize: 11, color: T.textSecondary, whiteSpace: "nowrap" }}>
+                        {a.classeLabel}
+                      </td>
+                      <td style={{ padding: "12px 14px", fontSize: 12, textAlign: "right", color: T.textPrimary, fontWeight: 500, whiteSpace: "nowrap" }}>
+                        {brl(a.valorReais)}
+                      </td>
+                      <td style={{ padding: "12px 14px", fontSize: 12, textAlign: "right", color: T.textSecondary, whiteSpace: "nowrap" }}>
+                        {pct.toFixed(1)}%
+                      </td>
+                      <td style={{ padding: "12px 14px", fontSize: 12, textAlign: "right", whiteSpace: "nowrap" }}>
+                        {a.rentMes
+                          ? <span style={{ color: rMes >= 0 ? "#22c55e" : "#ef4444" }}>{rMes >= 0 ? "+" : ""}{rMes.toFixed(2)}%</span>
+                          : <span style={{ color: T.textMuted }}>—</span>
+                        }
+                      </td>
+                      <td style={{ padding: "12px 14px", fontSize: 12, textAlign: "right", whiteSpace: "nowrap" }}>
+                        {a.rentAno
+                          ? <span style={{ color: rAno >= 0 ? "#22c55e" : "#ef4444", fontWeight: 500 }}>{rAno >= 0 ? "+" : ""}{rAno.toFixed(2)}%</span>
+                          : <span style={{ color: T.textMuted }}>—</span>
+                        }
+                      </td>
+                      <td style={{ padding: "12px 14px", fontSize: 11, textAlign: "right", color: a.vencimento ? T.textSecondary : T.textMuted, whiteSpace: "nowrap" }}>
+                        {a.vencimento || "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: "rgba(255,255,255,0.025)", borderTop: `0.5px solid ${T.border}` }}>
+                  <td style={{ padding: "12px 14px", fontSize: 11, color: T.textMuted, letterSpacing: "0.06em", textTransform: "uppercase" }} colSpan={2}>
+                    Total do objetivo
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 13, textAlign: "right", color: corTipo, fontWeight: 700, whiteSpace: "nowrap" }}>
+                    {brl(totalVinculado)}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 12, textAlign: "right", color: T.textMuted }}>100,0%</td>
+                  <td style={{ padding: "12px 14px", fontSize: 12, textAlign: "right", color: rentMediaMes >= 0 ? "#22c55e" : "#ef4444", whiteSpace: "nowrap", fontWeight: 600 }}>
+                    {rentMediaMes.toFixed(2)}%
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 12, textAlign: "right", color: rentMedia12 >= 0 ? "#22c55e" : "#ef4444", whiteSpace: "nowrap", fontWeight: 600 }}>
+                    {rentMedia12.toFixed(2)}%
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div style={{
+          padding: "12px 16px",
+          background: "rgba(255,255,255,0.02)",
+          border: `0.5px solid ${T.border}`,
+          borderRadius: T.radiusMd,
+          fontSize: 11,
+          color: T.textMuted,
+          lineHeight: 1.7,
+        }}>
+          Médias ponderadas pelo valor de cada ativo. Os percentuais de rentabilidade refletem o que você cadastrou na <strong style={{ color: T.textSecondary }}>Carteira</strong> — atualize lá para manter os dados em dia.
         </div>
       </div>
+    );
+  };
+
+  // ── MODAL: vincular ativos ──
+  const ModalVincularAtivos = () => {
+    if (!modalAtivos) return null;
+    const carteira = cliente?.carteira || {};
+    const todos = listarAtivosCarteira(carteira);
+    const labelAtivo = TIPO_OBJETIVO_PARA_LABEL[objetivo.tipo];
+    const total = todos.reduce((acc, a) => {
+      const k = `${a.classeKey}::${a.id}`;
+      return acc + (selecaoAtivos.has(k) ? a.valorReais : 0);
+    }, 0);
+
+    function toggle(a) {
+      const k = `${a.classeKey}::${a.id}`;
+      const n = new Set(selecaoAtivos);
+      if (n.has(k)) n.delete(k); else n.add(k);
+      setSelecaoAtivos(n);
+    }
+
+    return (
       <div style={{
-        marginTop: 16,
-        padding: "12px 16px",
-        background: "rgba(255,255,255,0.02)",
-        border: `0.5px solid ${T.border}`,
-        borderRadius: T.radiusMd,
-        fontSize: 12,
-        color: T.textSecondary,
-        lineHeight: 1.7,
-      }}>
-        Em breve você poderá visualizar seus ativos (ações, FIIs, ETFs, renda fixa) e como cada um contribui para realizar este objetivo — incluindo a rentabilidade real calculada automaticamente.
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 620,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      }}
+        onClick={() => !salvandoAtivos && setModalAtivos(false)}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            background: T.bgCard, border: `0.5px solid ${T.border}`, borderRadius: T.radiusLg,
+            width: 560, maxWidth: "100%", maxHeight: "86vh",
+            display: "flex", flexDirection: "column",
+          }}
+        >
+          <div style={{ padding: "18px 22px", borderBottom: `0.5px solid ${T.border}` }}>
+            <div style={{ fontSize: 10, color: T.gold, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>
+              Vincular ativos
+            </div>
+            <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 500, marginBottom: 4 }}>
+              {objetivo.nomeCustom || objetivo.label}
+            </div>
+            <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.6 }}>
+              Selecione os ativos da carteira que compõem o patrimônio deste objetivo.
+              Serão marcados com o rótulo "{labelAtivo}".
+            </div>
+          </div>
+
+          <div style={{ padding: "14px 22px", overflowY: "auto", flex: 1 }}>
+            {todos.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "32px 20px", fontSize: 12, color: T.textMuted, lineHeight: 1.7 }}>
+                Nenhum ativo cadastrado na carteira.<br />
+                Vá em "Carteira" e cadastre seus investimentos primeiro.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {todos.map(a => {
+                  const k = `${a.classeKey}::${a.id}`;
+                  const marcado = selecaoAtivos.has(k);
+                  const jaTemOutro = a.objetivo && a.objetivo !== labelAtivo;
+                  return (
+                    <div
+                      key={k}
+                      onClick={() => toggle(a)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "10px 12px",
+                        background: marcado ? "rgba(240,162,2,0.08)" : "rgba(255,255,255,0.02)",
+                        border: marcado ? `0.5px solid ${T.goldBorder}` : `0.5px solid ${T.border}`,
+                        borderRadius: T.radiusSm,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <div style={{
+                        width: 16, height: 16, borderRadius: 4,
+                        background: marcado ? T.gold : "transparent",
+                        border: marcado ? `1px solid ${T.gold}` : `1px solid ${T.textMuted}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0, color: T.bg, fontSize: 11, fontWeight: 700,
+                      }}>
+                        {marcado ? "✓" : ""}
+                      </div>
+                      <div style={{ width: 4, height: 22, borderRadius: 2, background: a.classeCor, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: T.textPrimary, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {a.nome || "Ativo sem nome"}
+                        </div>
+                        <div style={{ fontSize: 10, color: T.textMuted, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <span>{a.classeLabel}</span>
+                          {jaTemOutro && <span style={{ color: T.warning }}>· vinculado a "{a.objetivo}"</span>}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 13, color: marcado ? T.gold : T.textSecondary, fontWeight: 600, flexShrink: 0 }}>
+                        {brl(a.valorReais)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: "14px 22px", borderTop: `0.5px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                {selecaoAtivos.size} {selecaoAtivos.size === 1 ? "ativo" : "ativos"} · total
+              </div>
+              <div style={{ fontSize: 15, color: T.gold, fontWeight: 600 }}>{brl(total)}</div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                disabled={salvandoAtivos}
+                onClick={() => setModalAtivos(false)}
+                style={{ padding: "10px 16px", background: "none", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, color: T.textSecondary, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", fontFamily: T.fontFamily }}
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={salvandoAtivos}
+                onClick={() => salvarVinculoAtivos(selecaoAtivos)}
+                style={{ padding: "10px 20px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusMd, color: T.gold, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", fontFamily: T.fontFamily, fontWeight: 600 }}
+              >
+                {salvandoAtivos ? "Salvando..." : "Salvar vínculos"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: T.fontFamily }}>
@@ -1426,18 +1778,45 @@ export default function ObjetivoDetalhes() {
       `}</style>
 
       <Navbar />
+
+      {/* Botão voltar flutuante */}
+      <button
+        onClick={() => navigate(-1)}
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: 16,
+          transform: "translateY(-50%)",
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          border: "1px solid rgba(240,162,2,0.3)",
+          background: "rgba(240,162,2,0.15)",
+          color: "#F0A202",
+          fontSize: 20,
+          cursor: "pointer",
+          zIndex: 50,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.3s ease",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+          fontFamily: T.fontFamily,
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = "translateY(-50%) scale(1.15)";
+          e.currentTarget.style.background = "rgba(240,162,2,0.25)";
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = "translateY(-50%) scale(1)";
+          e.currentTarget.style.background = "rgba(240,162,2,0.15)";
+        }}
+      >
+        ←
+      </button>
+
       <div style={{ padding: "20px" }}>
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-
-          {/* Botão voltar */}
-          <button
-            onClick={() => navigate(-1)}
-            style={{ ...C.backBtn, marginBottom: 20 }}
-            onMouseEnter={e => e.currentTarget.style.color = T.textSecondary}
-            onMouseLeave={e => e.currentTarget.style.color = T.textMuted}
-          >
-            ← Voltar
-          </button>
 
           <Cabecalho />
           <Abas />

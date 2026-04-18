@@ -436,21 +436,26 @@ export default function Dashboard(){
         <div style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          fontSize: 10,
-          color: "#3E5C76",
-          marginBottom: 8,
-          letterSpacing: "0.03em",
+          justifyContent: "center",
+          gap: 10,
+          fontSize: 12,
+          color: "#748CAB",
+          marginBottom: 12,
+          letterSpacing: "0.06em",
+          fontWeight: 500,
+          textTransform: "uppercase",
         }}>
-          <span>{new Date().toLocaleDateString("pt-BR")}</span>
-          <span style={{ opacity: 0.4 }}>•</span>
-          <span style={{ color: statusMercado ? "#22c55e" : "#748CAB" }}>
+          <span style={{ color: "#5a7a9a" }}>{new Date().toLocaleDateString("pt-BR")}</span>
+          <span style={{ color: "#3E5C76" }}>•</span>
+          <span style={{ color: statusMercado ? "#22c55e" : "#9EB8D0", fontWeight: 600 }}>
             {statusMercado ? "● MERCADO ABERTO" : "● MERCADO FECHADO"}
           </span>
           {ultimaAtualizacao && (
             <>
-              <span style={{ opacity: 0.4 }}>•</span>
-              <span>Última atualização: {ultimaAtualizacao}</span>
+              <span style={{ color: "#3E5C76" }}>•</span>
+              <span style={{ color: "#5a7a9a", textTransform: "none", fontWeight: 400 }}>
+                Última atualização: <strong style={{ color: "#748CAB" }}>{ultimaAtualizacao}</strong>
+              </span>
             </>
           )}
         </div>
