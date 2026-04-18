@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
 import { T, C } from "../theme";
@@ -8,12 +8,8 @@ import { useCotacoesReais } from "../services/cotacoesReais";
 import {
   TAXA_ANUAL,
   IPCA_ANUAL,
-  simularNovoAporte,
-  simularNovaTaxa,
-  simularNovoPrazo,
   calcularProjecao,
   classificarStatus,
-  avaliarAporteMensal
 } from "../utils/objetivosCalc";
 
 function parseCentavos(s) { return parseInt(String(s || "0").replace(/\D/g, "")) || 0; }
@@ -25,18 +21,6 @@ function moeda(c) {
 function brl(v) {
   const n = Math.round((v || 0) * 100) / 100;
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// Funções de formatação visual (SEM cálculos automáticos)
-function formatarMoedaDisplay(valor) {
-  if (valor === "" || valor === null) return "";
-  const num = parseFloat(valor) || 0;
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(num);
-}
-
-function formatarPorcentagem(valor) {
-  if (valor === "" || valor === null) return "";
-  return `${parseFloat(valor) || 0}%`;
 }
 
 const emojisPorTipo = {
@@ -61,8 +45,30 @@ const gradientsPorTipo = {
   personalizado:       "linear-gradient(145deg, #001f10 0%, #003218 60%, rgba(0,204,102,0.18) 100%)",
 };
 
+const coresPorTipo = {
+  aposentadoria: "#F0A202",
+  imovel: "#8AC926",
+  carro: "#FF6B35",
+  viagem: "#5DD9C1",
+  educacao: "#2274A5",
+  saude: "#1982C4",
+  sucessaoPatrimonial: "#6A4C93",
+  personalizado: "#00CC66",
+};
+
+const labelTipoPorTipo = {
+  aposentadoria: "Aposentadoria",
+  imovel: "Aquisição de Imóvel",
+  carro: "Veículo",
+  viagem: "Viagem",
+  educacao: "Educação",
+  saude: "Saúde",
+  sucessaoPatrimonial: "Sucessão Patrimonial",
+  personalizado: "Objetivo",
+};
+
 const labelStatus = { viavel: "Plano Viável", ajustavel: "Plano Ajustável", inviavel: "Plano Inviável" };
-const corStatus = { viavel: "#22c55e", ajustavel: "#f59e0b", inviavel: "#ef4444" };
+const corStatus = { viavel: "#4ade80", ajustavel: "#f59e0b", inviavel: "#ef4444" };
 
 export default function ObjetivoDetalhes() {
   const { clienteId, objetivoIndex } = useParams();
@@ -73,19 +79,7 @@ export default function ObjetivoDetalhes() {
   const [objetivo, setObjetivo] = useState(null);
   const [ipca, setIpca] = useState(3.81);
   const [abaAtiva, setAbaAtiva] = useState("resumo");
-  const [simulacao, setSimulacao] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [rentabilidadeReal, setRentabilidadeReal] = useState(TAXA_ANUAL);
-
-  // Estado para simuladores
-  const [simAporte, setSimAporte] = useState(null);
-  const [simTaxa, setSimTaxa] = useState(null);
-  const [simPrazo, setSimPrazo] = useState(null);
-
-  // Estado temporário para inputs de simulação (strings para evitar re-renders)
-  const [inputAporte, setInputAporte] = useState("");
-  const [inputTaxa, setInputTaxa] = useState("");
-  const [inputPrazo, setInputPrazo] = useState("");
 
   // Acompanhamento mensal
   const [editandoMes, setEditandoMes] = useState(null);
@@ -93,7 +87,6 @@ export default function ObjetivoDetalhes() {
   const [salvandoMes, setSalvandoMes] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState(false);
 
-  // Carregar dados do cliente e objetivo
   useEffect(() => {
     async function carregar() {
       try {
@@ -113,7 +106,6 @@ export default function ObjetivoDetalhes() {
     carregar();
   }, [clienteId, objetivoIndex]);
 
-  // Obter IPCA dinâmico
   useEffect(() => {
     async function obterDados() {
       try {
@@ -126,57 +118,30 @@ export default function ObjetivoDetalhes() {
     obterDados();
   }, []);
 
-  // Auto-save da rentabilidade real
-  useEffect(() => {
-    if (!cliente || !objetivo || !clienteId) return;
-
-    const timer = setTimeout(async () => {
-      try {
-        const snap = await getDoc(doc(db, "clientes", clienteId));
-        if (snap.exists()) {
-          const dados = snap.data();
-          const objIndex = parseInt(objetivoIndex);
-          const objetivos = dados.objetivos || [];
-
-          if (objetivos[objIndex]) {
-            objetivos[objIndex].rentabilidadeReal = rentabilidadeReal;
-
-            await fetch(`https://william-porto.web.app`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" }
-            }).catch(() => {}); // Auto-save silencioso
-          }
-        }
-      } catch (erro) {
-        console.error("Erro ao salvar rentabilidade:", erro);
-      }
-    }, 1000); // Salvar 1 segundo após última alteração
-
-    return () => clearTimeout(timer);
-  }, [rentabilidadeReal, cliente, objetivo, clienteId, objetivoIndex]);
-
   if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", color: T.textMuted }}>Carregando dados...</div>;
+    return (
+      <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontFamily }}>
+        <div style={{ color: T.textMuted, fontSize: 13 }}>Carregando dados...</div>
+      </div>
+    );
   }
 
   if (!objetivo || !cliente) {
     return (
-      <div style={{ padding: 40, textAlign: "center" }}>
+      <div style={{ padding: 40, textAlign: "center", fontFamily: T.fontFamily }}>
         <div style={{ color: T.textMuted, marginBottom: 20 }}>Objetivo não encontrado</div>
-        <button onClick={() => navigate(-1)} style={{ ...C.button, background: T.primary, color: "#fff", cursor: "pointer" }}>
+        <button onClick={() => navigate(-1)} style={{ ...C.btnSecondary, cursor: "pointer" }}>
           Voltar
         </button>
       </div>
     );
   }
 
-  // Calcular diagnóstico
   const inicial = parseCentavos(objetivo.patrimAtual) / 100;
   const aporte = parseCentavos(objetivo.aporte) / 100;
   const meta = parseCentavos(objetivo.meta) / 100;
   const prazo = parseInt(objetivo.prazo) || 0;
 
-  // Encontrar anos necessários
   const j = Math.pow(1 + TAXA_ANUAL / 100, 1 / 12) - 1;
   const inflMensal = Math.pow(1 + IPCA_ANUAL / 100, 1 / 12) - 1;
   let vt = inicial;
@@ -192,261 +157,16 @@ export default function ObjetivoDetalhes() {
 
   const status = prazo > 0 ? classificarStatus(anosNec, prazo) : (anosNec ? "viavel" : "inviavel");
   const cor = corStatus[status];
+  const corTipo = coresPorTipo[objetivo.tipo] || coresPorTipo.personalizado;
   const projecao = calcularProjecao(inicial, aporte, Math.max(prazo || 10, 5));
   const emoji = emojisPorTipo[objetivo.tipo] || "⭐";
   const gradient = gradientsPorTipo[objetivo.tipo] || gradientsPorTipo.personalizado;
+  const pctAtingido = Math.min(100, meta > 0 ? (inicial / meta) * 100 : 0);
 
-  // Navegação em abas
-  const Abas = ({ ativa, onChange }) => (
-    <div style={{ display: "flex", gap: 12, borderBottom: `0.5px solid ${T.border}`, marginBottom: 24, overflowX: "auto" }}>
-      {["resumo", "simulador", "acompanhamento", "ativos"].map(aba => (
-        <button
-          key={aba}
-          onClick={() => onChange(aba)}
-          style={{
-            padding: "12px 16px",
-            background: "none",
-            border: "none",
-            borderBottom: ativa === aba ? `2px solid ${T.gold}` : "none",
-            color: ativa === aba ? T.textPrimary : T.textMuted,
-            fontSize: 13,
-            fontWeight: ativa === aba ? 500 : 400,
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-            textTransform: "capitalize"
-          }}
-        >
-          {aba === "resumo" && "📊 Resumo"}
-          {aba === "simulador" && "💡 Estratégias"}
-          {aba === "acompanhamento" && "📈 Acompanhamento"}
-          {aba === "ativos" && "💼 Ativos"}
-        </button>
-      ))}
-    </div>
-  );
-
-  // ── SEÇÃO 1: CABEÇALHO ──
-  const Cabecalho = () => (
-    <div style={{
-      background: gradient,
-      borderRadius: T.radiusLg,
-      padding: "24px 20px",
-      marginBottom: 24,
-      color: "#fff",
-      display: "flex",
-      alignItems: "center",
-      gap: 16
-    }}>
-      <div style={{ fontSize: 48 }}>{emoji}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
-          {objetivo.nomeCustom || objetivo.label}
-        </div>
-        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginBottom: 6 }}>
-          Meta: <strong>{brl(meta)}</strong>
-        </div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
-          Prazo: {prazo} {prazo === 1 ? "ano" : "anos"}
-        </div>
-      </div>
-      <div style={{
-        textAlign: "right",
-        padding: "12px 16px",
-        background: "rgba(255,255,255,0.15)",
-        borderRadius: T.radiusMd
-      }}>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginBottom: 4 }}>Status</div>
-        <div style={{
-          fontSize: 13,
-          fontWeight: 600,
-          padding: "4px 10px",
-          background: cor,
-          color: "#fff",
-          borderRadius: 12,
-          display: "inline-block"
-        }}>
-          {status === "viavel" ? "✓" : status === "ajustavel" ? "⚠" : "✕"} {labelStatus[status]}
-        </div>
-      </div>
-    </div>
-  );
-
-  // ── SEÇÃO 2: RESUMO PRINCIPAL ──
-  const Resumo = () => {
-    const diferencaRentabilidade = rentabilidadeReal - TAXA_ANUAL;
-    const corDiferenca = diferencaRentabilidade >= 0 ? "#22c55e" : "#ef4444";
-
-    return (
-      <div>
-        {/* Painel de Rentabilidade */}
-        <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: `0.5px solid ${T.border}`,
-          borderRadius: T.radiusMd,
-          padding: "16px",
-          marginBottom: 24,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-          gap: 16
-        }}>
-          <div>
-            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 500 }}>
-              📊 Meta de Rentabilidade
-            </div>
-            <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 600 }}>
-              {TAXA_ANUAL}% a.a.
-            </div>
-            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-              1,16% a.m.
-            </div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 500 }}>
-              💼 Rentabilidade Real Carteira
-            </div>
-            <input
-              type="number"
-              step="0.1"
-              value={rentabilidadeReal}
-              onChange={(e) => setRentabilidadeReal(parseFloat(e.target.value) || 0)}
-              style={{
-                width: "100%",
-                padding: "8px 10px",
-                background: T.bg,
-                border: `0.5px solid ${T.border}`,
-                borderRadius: T.radiusMd,
-                color: T.textPrimary,
-                fontSize: 14,
-                fontWeight: 600
-              }}
-            />
-            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-              Insira a rentabilidade real obtida
-            </div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 500 }}>
-              📈 Diferença
-            </div>
-            <div style={{
-              fontSize: 16,
-              color: corDiferenca,
-              fontWeight: 600
-            }}>
-              {diferencaRentabilidade > 0 ? "+" : ""}{diferencaRentabilidade.toFixed(2)}%
-            </div>
-            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-              {diferencaRentabilidade >= 0 ? "✓ Acima da meta" : "✗ Abaixo da meta"}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 8, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 500 }}>
-              💡 Status
-            </div>
-            <div style={{
-              fontSize: 12,
-              color: diferencaRentabilidade >= 0 ? "#22c55e" : "#f59e0b",
-              fontWeight: 600,
-              padding: "6px 10px",
-              background: diferencaRentabilidade >= 0 ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)",
-              borderRadius: T.radiusMd,
-              textAlign: "center"
-            }}>
-              {diferencaRentabilidade >= 0 ? "✓ Meta Atingida" : "⚠ Ajuste Necessário"}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ fontSize: 13, color: T.textSecondary, marginBottom: 16, fontWeight: 500 }}>
-          DADOS PRINCIPAIS
-        </div>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 12,
-          marginBottom: 24
-        }}>
-          {[
-            ["Patrimônio Necessário", brl(meta)],
-            ["Patrimônio Atual", brl(inicial)],
-            ["Aporte Mensal", moeda(aporte * 100)],
-            ["Prazo Desejado", `${prazo} anos`],
-            ["Prazo Necessário", anosNec ? `${anosNec} anos` : "50+ anos"],
-            ["Meta de Rentabilidade", `${TAXA_ANUAL}% a.a. (1,16% a.m.)`],
-            ["Inflação (IPCA)", `${ipca.toFixed(2)}%`],
-            ["Renda em " + (prazo || 30) + " anos", projecao.length > 0 ? brl(projecao[projecao.length - 1]?.rendaMensalReal) : "—"]
-          ].map(([label, valor], i) => (
-            <div key={i} style={{
-              background: "rgba(255,255,255,0.03)",
-              border: `0.5px solid ${T.border}`,
-              borderRadius: T.radiusMd,
-              padding: "12px 14px"
-            }}>
-              <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                {label}
-              </div>
-              <div style={{ fontSize: 14, color: T.textPrimary, fontWeight: 500 }}>
-                {valor}
-              </div>
-            </div>
-          ))}
-      </div>
-
-      <div style={{ fontSize: 13, color: T.textSecondary, marginBottom: 16, fontWeight: 500, marginTop: 28 }}>
-        PROJEÇÃO ANO A ANO
-      </div>
-      <div style={{
-        background: "rgba(255,255,255,0.03)",
-        border: `0.5px solid ${T.border}`,
-        borderRadius: T.radiusMd,
-        overflow: "hidden"
-      }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ borderBottom: `0.5px solid ${T.border}` }}>
-              <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Ano</th>
-              <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Patrimônio Real</th>
-              <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, color: T.textMuted, fontWeight: 500 }}>Renda Mensal</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projecao.map((p, i) => (
-              <tr key={i} style={{ borderBottom: `0.5px solid ${T.border}` }}>
-                <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary }}>Ano {Math.round(p.ano)}</td>
-                <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary, textAlign: "right" }}>{brl(p.totalReal)}</td>
-                <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary, textAlign: "right" }}>{brl(p.rendaMensalReal)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    );
-  };
-
-  // ── SEÇÃO 3: SIMULADOR ──
-  // Cálculos (fora da renderização para evitar remontagem de inputs)
-  const aporteSimulado = inputAporte ? parseFloat(inputAporte) : aporte;
-  const taxaSimulada = inputTaxa ? parseFloat(inputTaxa) : TAXA_ANUAL;
-  const prazoSimulado = inputPrazo ? parseFloat(inputPrazo) : prazo;
-
-  const calcularAporte = () => {
-    const novo = inputAporte ? parseFloat(inputAporte) : aporte;
-    setSimAporte(simularNovoAporte(inicial, meta, prazo, novo));
-  };
-
-  const calcularTaxa = () => {
-    const nova = inputTaxa ? parseFloat(inputTaxa) : TAXA_ANUAL;
-    setSimTaxa(simularNovaTaxa(inicial, aporte, meta, prazo, nova));
-  };
-
-  const calcularPrazo = () => {
-    const novo = inputPrazo ? parseFloat(inputPrazo) : prazo;
-    setSimPrazo(simularNovoPrazo(inicial, aporte, meta, novo));
-  };
+  const historico = objetivo?.historicoAcompanhamento || [];
+  const rentabilidadeMediaHistorico = historico.length > 0
+    ? historico.reduce((s, h) => s + (h.rentabilidadeCarteira || 0), 0) / historico.length
+    : null;
 
   async function salvarMesHistorico(mesAnoKey, dados) {
     setSalvandoMes(true);
@@ -472,6 +192,507 @@ export default function ObjetivoDetalhes() {
     setEditandoMes(null);
   }
 
+  // ── ABAS ──
+  const Abas = () => {
+    const tabs = [
+      { key: "resumo", label: "Resumo" },
+      { key: "simulador", label: "Estratégias" },
+      { key: "acompanhamento", label: "Acompanhamento" },
+      { key: "ativos", label: "Ativos" },
+    ];
+    return (
+      <div style={{ display: "flex", gap: 2, borderBottom: `0.5px solid ${T.border}`, marginBottom: 28 }}>
+        {tabs.map(({ key, label }) => {
+          const ativo = abaAtiva === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setAbaAtiva(key)}
+              style={{
+                padding: "11px 22px",
+                background: "none",
+                border: "none",
+                borderBottom: ativo ? `2px solid ${corTipo}` : "2px solid transparent",
+                color: ativo ? T.textPrimary : T.textMuted,
+                fontSize: 14,
+                fontWeight: ativo ? 500 : 400,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                fontFamily: T.fontFamily,
+                transition: "all 0.2s",
+                letterSpacing: "0.01em",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ── CABEÇALHO ──
+  const Cabecalho = () => (
+    <div style={{
+      background: gradient,
+      borderRadius: T.radiusLg,
+      padding: "24px 22px 20px",
+      marginBottom: 24,
+      color: "#fff",
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 44, lineHeight: 1 }}>{emoji}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", marginBottom: 5, letterSpacing: "0.16em", textTransform: "uppercase" }}>
+            {labelTipoPorTipo[objetivo.tipo] || "Objetivo"}
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 600, marginBottom: 5, lineHeight: 1.2 }}>
+            {objetivo.nomeCustom || objetivo.label}
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)" }}>
+            Meta: <strong style={{ color: "#fff" }}>{brl(meta)}</strong>
+            <span style={{ margin: "0 8px", opacity: 0.35 }}>·</span>
+            {prazo} {prazo === 1 ? "ano" : "anos"}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginBottom: 6, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+            Status
+          </div>
+          <div style={{
+            fontSize: 14,
+            fontWeight: 600,
+            padding: "7px 16px",
+            background: `${cor}20`,
+            color: cor,
+            border: `1px solid ${cor}45`,
+            borderRadius: 20,
+            display: "inline-block",
+            letterSpacing: "0.01em",
+          }}>
+            {status === "viavel" ? "✓" : status === "ajustavel" ? "⚠" : "✕"} {labelStatus[status]}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 10, color: "rgba(255,255,255,0.4)" }}>
+          <span>Patrimônio atual: {brl(inicial)}</span>
+          <span>{pctAtingido.toFixed(1)}% da meta atingido</span>
+        </div>
+        <div style={{ height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden" }}>
+          <div style={{
+            height: "100%",
+            width: `${pctAtingido}%`,
+            background: `linear-gradient(90deg, ${corTipo}70, ${corTipo})`,
+            borderRadius: 4,
+            transition: "width 1s ease",
+          }} />
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── GRÁFICO SVG ──
+  const GraficoProjecao = () => {
+    if (projecao.length < 2) return null;
+    const W = 800, H = 210;
+    const padT = 24, padB = 38, padL = 4, padR = 4;
+    const cW = W - padL - padR;
+    const cH = H - padT - padB;
+
+    const maxVal = Math.max(...projecao.map(p => p.totalReal), meta) * 1.1;
+    const toX = (i) => padL + (i / (projecao.length - 1)) * cW;
+    const toY = (v) => padT + cH - Math.max(0, Math.min(1, v / maxVal)) * cH;
+    const metaY = toY(meta);
+    const pts = projecao.map((p, i) => ({ x: toX(i), y: toY(p.totalReal) }));
+    const linePath = pts.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(" ");
+    const areaPath = `${linePath} L ${pts[pts.length - 1].x.toFixed(1)} ${(padT + cH).toFixed(1)} L ${pts[0].x.toFixed(1)} ${(padT + cH).toFixed(1)} Z`;
+    const crossIdx = projecao.findIndex(p => p.totalReal >= meta);
+
+    const labelStep = Math.max(1, Math.ceil((projecao.length - 1) / 5));
+    const labelIdxs = new Set([0, projecao.length - 1]);
+    for (let i = labelStep; i < projecao.length - 1; i += labelStep) labelIdxs.add(i);
+    const labelArr = [...labelIdxs].sort((a, b) => a - b);
+
+    const gradId = `pg_${objetivo.tipo}`;
+
+    return (
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={corTipo} stopOpacity="0.45" />
+            <stop offset="85%" stopColor={corTipo} stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {[0.25, 0.5, 0.75].map(pct => (
+          <line key={pct}
+            x1={padL} y1={padT + cH * (1 - pct)}
+            x2={W - padR} y2={padT + cH * (1 - pct)}
+            stroke="rgba(62,92,118,0.18)" strokeWidth="1"
+          />
+        ))}
+
+        <path d={areaPath} fill={`url(#${gradId})`} />
+
+        {meta > 0 && meta < maxVal && (
+          <>
+            <line x1={padL} y1={metaY} x2={W - padR} y2={metaY}
+              stroke="#22c55e" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.7" />
+            <text x={W - padR - 8} y={metaY - 8} textAnchor="end"
+              fill="#22c55e" fontSize="10" opacity="0.85" fontFamily={T.fontFamily}>
+              Meta {brl(meta)}
+            </text>
+          </>
+        )}
+
+        <path d={linePath} fill="none" stroke={corTipo} strokeWidth="2.5"
+          strokeLinecap="round" strokeLinejoin="round" />
+
+        {crossIdx >= 0 && (
+          <>
+            <circle cx={pts[crossIdx].x} cy={pts[crossIdx].y} r="10" fill="#22c55e" opacity="0.12" />
+            <circle cx={pts[crossIdx].x} cy={pts[crossIdx].y} r="4" fill="#22c55e" />
+            <line x1={pts[crossIdx].x} y1={pts[crossIdx].y} x2={pts[crossIdx].x} y2={padT + cH}
+              stroke="#22c55e" strokeWidth="1" strokeDasharray="3 4" opacity="0.35" />
+          </>
+        )}
+
+        <circle cx={pts[0].x} cy={pts[0].y} r="4" fill={corTipo} />
+        <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r="3.5" fill={corTipo} opacity="0.7" />
+
+        <text x={pts[pts.length - 1].x} y={pts[pts.length - 1].y - 12}
+          textAnchor="end" fill={corTipo} fontSize="11" fontWeight="600"
+          fontFamily={T.fontFamily} opacity="0.9">
+          {brl(projecao[projecao.length - 1].totalReal)}
+        </text>
+
+        {labelArr.map(i => (
+          <text key={i} x={pts[i].x} y={H - 8} textAnchor="middle"
+            fill="#3E5C76" fontSize="10" fontFamily={T.fontFamily}>
+            {projecao[i].ano === 0 ? "Hoje" : `Ano ${Math.round(projecao[i].ano)}`}
+          </text>
+        ))}
+      </svg>
+    );
+  };
+
+  // ── RESUMO ──
+  const Resumo = () => {
+    const jMensal = Math.pow(1 + TAXA_ANUAL / 100, 1 / 12) - 1;
+    const rentMetaMensal = parseFloat((jMensal * 100).toFixed(2));
+    const rentRealizada = rentabilidadeMediaHistorico;
+    const diferencaRent = rentRealizada !== null ? rentRealizada - rentMetaMensal : null;
+
+    const infoPorTipo = {
+      aposentadoria: {
+        headline: "Independência Financeira",
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para viver de renda passiva, sem depender de renda ativa. Juros compostos com meta de ${TAXA_ANUAL}% ao ano real sobre aportes de ${brl(aporte)}/mês.`,
+        insight: status === "viavel"
+          ? `Plano no caminho certo — meta atingível em ${anosNec} anos. Renda mensal estimada ao final: ${brl(projecao.at(-1)?.rendaMensalReal)}.`
+          : `Para atingir ${brl(meta)} em ${prazo} anos, é necessário ajustar o aporte ou o prazo. Veja as Estratégias.`,
+      },
+      imovel: {
+        headline: "Aquisição do Imóvel",
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para compra à vista ou entrada expressiva do imóvel. Cada aporte de ${brl(aporte)}/mês acelera a conquista.`,
+        insight: status === "viavel"
+          ? `Plano viável — valor projetado ao final do prazo: ${brl(projecao.at(-1)?.totalReal)}.`
+          : `Para atingir a meta em ${prazo} anos, ajuste o plano na aba Estratégias.`,
+      },
+      carro: {
+        headline: "Aquisição do Veículo",
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para compra à vista ou com entrada expressiva. Disciplina no aporte mensal é a chave.`,
+        insight: status === "viavel"
+          ? `Plano no prazo — você atinge ${brl(meta)} em ${anosNec} anos.`
+          : `Ajuste necessário para cumprir o prazo de ${prazo} anos — veja as Estratégias.`,
+      },
+      viagem: {
+        headline: "Viagem dos Sonhos",
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para realizar a viagem planejada. Cada aporte torna o sonho mais próximo.`,
+        insight: status === "viavel"
+          ? `Plano viável — valor projetado ao final: ${brl(projecao.at(-1)?.totalReal)}.`
+          : `Ajuste necessário — veja as Estratégias.`,
+      },
+      educacao: {
+        headline: "Educação",
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para custear a formação planejada. Investir em educação é o ativo mais valorizado no longo prazo.`,
+        insight: status === "viavel"
+          ? `Plano no prazo — valor projetado: ${brl(projecao.at(-1)?.totalReal)}.`
+          : `Ajuste necessário — veja as Estratégias.`,
+      },
+      saude: {
+        headline: "Saúde e Qualidade de Vida",
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para garantir qualidade de vida e cobertura de saúde ao longo dos anos.`,
+        insight: status === "viavel"
+          ? `Plano viável — valor projetado: ${brl(projecao.at(-1)?.totalReal)}.`
+          : `Ajuste necessário — veja as Estratégias.`,
+      },
+      sucessaoPatrimonial: {
+        headline: "Sucessão Patrimonial",
+        descricao: `Estruturar ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para transmissão eficiente do patrimônio, protegendo a família com mínima carga tributária.`,
+        insight: `Horizonte de ${prazo} anos para estruturar instrumentos sucessórios com máxima eficiência fiscal.`,
+      },
+    };
+
+    const info = infoPorTipo[objetivo.tipo] || {
+      headline: objetivo.nomeCustom || "Objetivo Personalizado",
+      descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"}.`,
+      insight: `Valor projetado ao final: ${brl(projecao.at(-1)?.totalReal)}.`,
+    };
+
+    const corInsight = status === "viavel" ? "#4ade80" : status === "ajustavel" ? "#f59e0b" : "#ef4444";
+
+    return (
+      <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
+
+        {/* Hero do plano */}
+        <div style={{
+          background: `linear-gradient(135deg, ${corTipo}12, ${corTipo}06)`,
+          border: `0.5px solid ${corTipo}30`,
+          borderLeft: `3px solid ${corTipo}`,
+          borderRadius: T.radiusMd,
+          padding: "20px 22px",
+          marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 10, color: corTipo, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>
+            {labelTipoPorTipo[objetivo.tipo] || "Objetivo"}
+          </div>
+          <div style={{ fontSize: 19, fontWeight: 600, color: T.textPrimary, marginBottom: 8, lineHeight: 1.25 }}>
+            {info.headline}
+          </div>
+          <div style={{ fontSize: 13, color: T.textSecondary, lineHeight: 1.75, marginBottom: 12 }}>
+            {info.descricao}
+          </div>
+          <div style={{
+            fontSize: 12,
+            color: corInsight,
+            lineHeight: 1.6,
+            paddingTop: 12,
+            borderTop: `0.5px solid ${T.border}`,
+            fontWeight: 500,
+          }}>
+            {info.insight}
+          </div>
+        </div>
+
+        {/* KPI mini cards */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 10,
+          marginBottom: 20,
+        }}>
+          {[
+            { label: "Patrimônio Atual", valor: brl(inicial), color: corTipo },
+            { label: "Meta", valor: brl(meta), color: T.textPrimary },
+            { label: "Aporte / Mês", valor: brl(aporte), color: T.textPrimary },
+            {
+              label: anosNec && anosNec <= prazo ? "Atingível em" : "Prazo Desejado",
+              valor: anosNec ? `${anosNec} anos` : `${prazo} anos`,
+              color: cor,
+            },
+          ].map(({ label, valor, color }, i) => (
+            <div key={i} style={{
+              background: "rgba(255,255,255,0.025)",
+              border: `0.5px solid ${T.border}`,
+              borderRadius: T.radiusMd,
+              padding: "14px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 15, color, fontWeight: 600, lineHeight: 1.2 }}>
+                {valor}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Gráfico */}
+        <div style={{
+          background: "rgba(255,255,255,0.02)",
+          border: `0.5px solid ${T.border}`,
+          borderRadius: T.radiusMd,
+          padding: "16px 12px 8px",
+          marginBottom: 20,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingLeft: 4 }}>
+            <div style={{ fontSize: 10, color: T.textMuted, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 500 }}>
+              Projeção Patrimonial
+            </div>
+            <div style={{ display: "flex", gap: 16, fontSize: 10, color: T.textMuted }}>
+              <span><span style={{ color: corTipo, fontWeight: 700 }}>—</span> Patrimônio Projetado</span>
+              <span><span style={{ color: "#22c55e", fontWeight: 700 }}>- -</span> Meta</span>
+            </div>
+          </div>
+          <GraficoProjecao />
+        </div>
+
+        {/* Rentabilidade */}
+        <div style={{
+          background: "rgba(255,255,255,0.02)",
+          border: `0.5px solid ${T.border}`,
+          borderRadius: T.radiusMd,
+          padding: "16px 18px",
+          marginBottom: 20,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 16,
+        }}>
+          <div>
+            <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
+              Meta de Rentabilidade
+            </div>
+            <div style={{ fontSize: 18, color: T.textPrimary, fontWeight: 600 }}>
+              {TAXA_ANUAL}% a.a.
+            </div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
+              {rentMetaMensal}% a.m.
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
+              Rent. Realizada (média)
+            </div>
+            <div style={{
+              fontSize: 18,
+              color: rentRealizada !== null
+                ? (rentRealizada >= rentMetaMensal ? "#22c55e" : "#ef4444")
+                : T.textMuted,
+              fontWeight: 600,
+            }}>
+              {rentRealizada !== null ? `${rentRealizada.toFixed(2)}% a.m.` : "—"}
+            </div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
+              {rentRealizada !== null ? "Baseado no acompanhamento" : "Registre no Acompanhamento"}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
+              Diferença
+            </div>
+            {diferencaRent !== null ? (
+              <>
+                <div style={{ fontSize: 18, color: diferencaRent >= 0 ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+                  {diferencaRent > 0 ? "+" : ""}{diferencaRent.toFixed(2)}%
+                </div>
+                <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
+                  {diferencaRent >= 0 ? "✓ Acima da meta" : "✗ Abaixo da meta"}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 18, color: T.textMuted }}>—</div>
+            )}
+          </div>
+
+          <div>
+            <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
+              IPCA Atual
+            </div>
+            <div style={{ fontSize: 18, color: T.textPrimary, fontWeight: 600 }}>
+              {ipca.toFixed(2)}%
+            </div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>ao ano</div>
+          </div>
+        </div>
+
+        {/* Dados do plano */}
+        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          Dados do Plano
+        </div>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: 10,
+          marginBottom: 28,
+        }}>
+          {[
+            ["Patrimônio Necessário", brl(meta)],
+            ["Patrimônio Atual", brl(inicial)],
+            ["Aporte Mensal", brl(aporte)],
+            ["Prazo Desejado", `${prazo} ${prazo === 1 ? "ano" : "anos"}`],
+            ["Prazo Necessário", anosNec ? `${anosNec} anos` : "50+ anos"],
+            ["Meta de Rentabilidade", `${TAXA_ANUAL}% a.a.`],
+            ["IPCA", `${ipca.toFixed(2)}% a.a.`],
+            ["Renda Mensal ao Final", projecao.length > 0 ? brl(projecao[projecao.length - 1]?.rendaMensalReal) : "—"],
+          ].map(([label, valor], i) => (
+            <div key={i} style={{
+              background: "rgba(255,255,255,0.02)",
+              border: `0.5px solid ${T.border}`,
+              borderRadius: T.radiusMd,
+              padding: "12px 14px",
+            }}>
+              <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 6, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                {label}
+              </div>
+              <div style={{ fontSize: 14, color: T.textPrimary, fontWeight: 500 }}>
+                {valor}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabela projeção */}
+        <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 14, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+          Projeção Ano a Ano
+        </div>
+        <div style={{
+          background: "rgba(255,255,255,0.02)",
+          border: `0.5px solid ${T.border}`,
+          borderRadius: T.radiusMd,
+          overflow: "hidden",
+        }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: `0.5px solid ${T.border}`, background: "rgba(255,255,255,0.025)" }}>
+                {["Ano", "Patrimônio Real", "Renda Mensal", "vs. Meta"].map((h, i) => (
+                  <th key={i} style={{
+                    padding: "10px 14px",
+                    textAlign: i === 0 ? "left" : "right",
+                    fontSize: 10, color: T.textMuted, fontWeight: 500, letterSpacing: "0.08em",
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {projecao.map((p, i) => {
+                const atingiu = p.totalReal >= meta;
+                const pctMeta = meta > 0 ? ((p.totalReal / meta) * 100).toFixed(0) : "—";
+                return (
+                  <tr key={i} style={{
+                    borderBottom: `0.5px solid ${T.border}`,
+                    background: atingiu ? "rgba(74,222,128,0.04)" : "transparent",
+                  }}>
+                    <td style={{ padding: "10px 14px", fontSize: 12, color: T.textPrimary }}>
+                      Ano {Math.round(p.ano)}
+                    </td>
+                    <td style={{ padding: "10px 14px", fontSize: 12, textAlign: "right", color: atingiu ? "#4ade80" : T.textPrimary, fontWeight: atingiu ? 600 : 400 }}>
+                      {brl(p.totalReal)}
+                    </td>
+                    <td style={{ padding: "10px 14px", fontSize: 12, textAlign: "right", color: T.textSecondary }}>
+                      {brl(p.rendaMensalReal)}
+                    </td>
+                    <td style={{ padding: "10px 14px", fontSize: 11, textAlign: "right" }}>
+                      {atingiu
+                        ? <span style={{ color: "#4ade80", fontWeight: 600 }}>✓ Atingido</span>
+                        : <span style={{ color: T.textMuted }}>{pctMeta}%</span>
+                      }
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // ── ESTRATÉGIAS ──
   const Planos = () => {
     const calcAporteNec = () => {
       if (!prazo || prazo <= 0 || !meta) return aporte * 2;
@@ -530,7 +751,6 @@ export default function ObjetivoDetalhes() {
           {descricao}
         </div>
 
-        {/* Comparação visual antes → depois */}
         {comparacao && (
           <div style={{
             display: "grid",
@@ -763,8 +983,7 @@ export default function ObjetivoDetalhes() {
     const planos = planosEspecificos();
 
     return (
-      <div>
-        {/* Header */}
+      <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 10, fontWeight: 500, letterSpacing: "0.18em", textTransform: "uppercase" }}>
             Estratégias Personalizadas
@@ -775,7 +994,6 @@ export default function ObjetivoDetalhes() {
           </div>
         </div>
 
-        {/* Status Mini Card */}
         <div style={{
           background: "rgba(255,255,255,0.02)",
           border: `0.5px solid ${T.border}`,
@@ -804,11 +1022,7 @@ export default function ObjetivoDetalhes() {
           </div>
         </div>
 
-        {/* Ajustar a Rota */}
-        <div style={{
-          fontSize: 10, color: T.textMuted, letterSpacing: "0.18em", textTransform: "uppercase",
-          marginBottom: 16, display: "flex", alignItems: "center", gap: 10
-        }}>
+        <div style={{ fontSize: 10, color: T.textMuted, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ whiteSpace: "nowrap" }}>Ajustar a Rota</span>
           <div style={{ flex: 1, height: "0.5px", background: T.border }} />
         </div>
@@ -816,79 +1030,72 @@ export default function ObjetivoDetalhes() {
         <CardPlano
           numero="01"
           codigo="M+"
-          titulo="Ajuste do Aporte Mensal"
+          titulo="Aumentar o Aporte Mensal"
           subtitulo="Rota Principal"
           cor="#22c55e"
           descricao={
             status === "viavel"
-              ? "O plano está no caminho certo. A consistência no aporte atual é suficiente para atingir a meta dentro do prazo estabelecido. Um incremento adicional amplia a margem de segurança e antecipa a conquista."
-              : `A disciplina de aportes é o principal fator de sucesso no acúmulo patrimonial de longo prazo. Para atingir ${brl(meta)} em ${prazo} anos, o aporte mensal necessário é de ${brl(aporteNecessario)}.`
+              ? "O plano está no caminho certo. A consistência no aporte atual é suficiente para atingir a meta dentro do prazo estabelecido. Um incremento adicional amplia a margem de segurança e antecipa a conquista do seu objetivo."
+              : `Para alcançar ${brl(meta)} em ${prazo} anos mantendo a taxa de ${TAXA_ANUAL}% a.a., o aporte mensal necessário foi calculado abaixo. Esta é a rota mais direta para atingir seu objetivo no prazo original.`
           }
-          destaque={
-            status === "viavel"
-              ? `Aporte atual de ${brl(aporte)}/mês garante a meta no prazo estabelecido`
-              : `Aporte necessário: ${brl(aporteNecessario)}/mês  (+${brl(aumentoNecessario)}/mês  —  +${percentualAumento}%)`
-          }
+          comparacao={status !== "viavel" ? {
+            antes: { label: "Aporte Atual", valor: `${brl(aporte)}`, sub: "por mês" },
+            depois: { label: "Aporte Necessário", valor: `${brl(aporteNecessario)}`, sub: `+${brl(aumentoNecessario)}/mês  (+${percentualAumento}%)` }
+          } : {
+            antes: { label: "Aporte Atual", valor: `${brl(aporte)}`, sub: "por mês" },
+            depois: { label: "Chegará em", valor: `${prazoEstendido || prazo} anos`, sub: prazoEstendido && prazoEstendido < prazo ? `${Math.round((prazo - prazoEstendido) * 10) / 10} anos antes do prazo` : "dentro do prazo" }
+          }}
           itens={[
             status !== "viavel"
-              ? `Ajuste mensal necessário: ${brl(aumentoNecessario)} adicionais por mês, representando ${percentualAumento}% acima do aporte atual`
+              ? `Aumento necessário: ${brl(aumentoNecessario)} adicionais por mês, correspondendo a ${percentualAumento}% acima do aporte atual`
               : "Aporte atual dentro do planejamento — mantenha a consistência e realize revisões anuais para preservar o poder real de acumulação",
-            "Automatize os aportes via débito automático na data de recebimento do salário, eliminando o viés comportamental de postergação do investimento",
+            "Automatize os aportes via débito automático na data de recebimento do salário, eliminando o viés comportamental de postergação",
             "Reajuste o aporte pelo IPCA anualmente para preservar o poder real de acumulação e não perder terreno para a inflação ao longo do prazo",
             "Redirecione receitas extraordinárias integralmente ao objetivo: 13º salário, bônus, PLR e restituição de IR têm impacto desproporcional no longo prazo",
-            "Controle o lifestyle inflation: a cada incremento de renda, comprometa ao menos 50% do aumento com o aporte — comportamento validado pelo CFP como fator crítico de sucesso"
+            "A cada incremento de renda, comprometa ao menos 50% do aumento com o aporte — controle do lifestyle inflation é fator crítico validado pelo CFP"
           ]}
         />
 
         <CardPlano
           numero="02"
           codigo="T+"
-          titulo="Extensão Estratégica do Prazo"
+          titulo="Estender o Prazo do Objetivo"
           subtitulo="Rota Alternativa"
           cor="#3b82f6"
           descricao={
             prazoEstendido && prazoEstendido <= prazo
-              ? `O plano está adiantado. Mantendo o aporte atual de ${brl(aporte)}/mês, a meta de ${brl(meta)} será atingida em ${prazoEstendido} anos — ${Math.round((prazo - prazoEstendido) * 10) / 10} anos antes do prazo original estabelecido.`
+              ? `O plano está adiantado. Mantendo o aporte atual de ${brl(aporte)}/mês, a meta de ${brl(meta)} será atingida em ${prazoEstendido} anos — antes do prazo original. Nenhum ajuste é necessário.`
               : prazoEstendido
-              ? `Um horizonte de investimento maior potencializa o efeito dos juros compostos de forma não linear. Mantendo o aporte atual de ${brl(aporte)}/mês, a meta será atingida em ${prazoEstendido} anos.`
-              : `Com o aporte atual, o objetivo levaria mais de 50 anos para ser atingido. A extensão de prazo isolada não resolve — o ajuste de aporte é indispensável para viabilizar o plano.`
+              ? `Mantendo o aporte atual de ${brl(aporte)}/mês sem qualquer alteração, calcule abaixo em quanto tempo você atingirá ${brl(meta)}. Um prazo maior potencializa o efeito dos juros compostos de forma não linear.`
+              : `Com o aporte atual, o objetivo levaria mais de 50 anos. A extensão de prazo isolada não resolve — o ajuste de aporte é indispensável.`
           }
-          destaque={
-            prazoEstendido && prazoEstendido <= prazo
-              ? `Meta atingida em ${prazoEstendido} anos — ${Math.round((prazo - prazoEstendido) * 10) / 10} anos antes do prazo previsto`
-              : prazoEstendido
-              ? `Prazo real com aporte atual: ${prazoEstendido} anos  (+${anosExtras} anos além do planejado)`
-              : "Prazo projetado: superior a 50 anos com o aporte atual"
-          }
+          comparacao={prazoEstendido ? {
+            antes: { label: "Prazo Desejado", valor: `${prazo} anos`, sub: `aporte de ${brl(aporte)}/mês` },
+            depois: prazoEstendido <= prazo
+              ? { label: "Chegará em", valor: `${prazoEstendido} anos`, sub: `${Math.round((prazo - prazoEstendido) * 10) / 10} anos antecipado` }
+              : { label: "Prazo Real", valor: `${prazoEstendido} anos`, sub: `+${anosExtras} anos além do planejado` }
+          } : null}
           itens={[
             prazoEstendido
-              ? `Projeção consolidada: ${brl(meta)} atingidos em ${prazoEstendido} anos mantendo ${brl(aporte)}/mês sem alteração nos aportes`
+              ? `Com o aporte atual de ${brl(aporte)}/mês mantido sem alteração, ${brl(meta)} será atingido em ${prazoEstendido} anos`
               : "Aporte atual insuficiente para qualquer horizonte razoável — o ajuste de contribuição mensal é a ação prioritária",
-            "Prazo mais longo permite alocação maior em renda variável, historicamente superior à renda fixa em horizontes acima de 5 anos com menor custo real de risco",
-            "Combine extensão de prazo com aumentos graduais de aporte — a convergência das duas alavancas é mais eficiente do que cada uma aplicada isoladamente",
-            "Defina marcos intermediários de patrimônio para monitoramento e manutenção do comprometimento ao longo do horizonte de planejamento",
-            "O custo de adiar o início dos aportes é assimétrico: cada ano de postergação exige esforço de recuperação desproporcional nos anos subsequentes"
+            "Um prazo mais longo permite alocação maior em renda variável, historicamente superior à renda fixa em horizontes acima de 5 anos",
+            "Combine extensão de prazo com aumentos graduais de aporte — a convergência das duas alavancas é mais eficiente do que cada uma isolada",
+            "Defina marcos intermediários de patrimônio para monitoramento e comprometimento ao longo do horizonte de planejamento",
+            "O custo de adiar o início dos aportes é assimétrico: cada ano de postergação exige esforço de recuperação desproporcional nos anos seguintes"
           ]}
         />
 
-        {/* Alternativas estratégicas por tipo */}
         {planos.length > 0 && (
           <>
-            <div style={{
-              fontSize: 10, color: T.textMuted, letterSpacing: "0.18em", textTransform: "uppercase",
-              marginBottom: 16, marginTop: 28, display: "flex", alignItems: "center", gap: 10
-            }}>
+            <div style={{ fontSize: 10, color: T.textMuted, letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 16, marginTop: 28, display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ whiteSpace: "nowrap" }}>Alternativas Estratégicas</span>
               <div style={{ flex: 1, height: "0.5px", background: T.border }} />
             </div>
-
-            {planos.map(p => (
-              <CardPlano key={p.numero} {...p} />
-            ))}
+            {planos.map(p => <CardPlano key={p.numero} {...p} />)}
           </>
         )}
 
-        {/* Nota CFP */}
         <div style={{
           marginTop: 24,
           padding: "16px 20px",
@@ -906,10 +1113,10 @@ export default function ObjetivoDetalhes() {
     );
   };
 
-  // ── SEÇÃO 4: ACOMPANHAMENTO MENSAL ──
+  // ── ACOMPANHAMENTO MENSAL ──
   const Acompanhamento = () => {
-    const historico = objetivo?.historicoAcompanhamento || [];
-    const temHistorico = historico.length > 0;
+    const hist = objetivo?.historicoAcompanhamento || [];
+    const temHistorico = hist.length > 0;
 
     const hoje = new Date();
     const mesAtual = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
@@ -918,7 +1125,6 @@ export default function ObjetivoDetalhes() {
     const jMensal = Math.pow(1 + TAXA_ANUAL / 100, 1 / 12) - 1;
     const metaRentPct = parseFloat((jMensal * 100).toFixed(2));
 
-    // Gera linhas: mês atual até fim do prazo
     const linhas = [];
     let patrimonioAlvo = inicial;
     for (let i = 0; i < totalMeses; i++) {
@@ -926,7 +1132,7 @@ export default function ObjetivoDetalhes() {
       const mesAnoKey = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}`;
       const mesLabel = data.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
       patrimonioAlvo = patrimonioAlvo * (1 + jMensal) + aporte;
-      const dadoHist = historico.find(h => h.mesAno === mesAnoKey);
+      const dadoHist = hist.find(h => h.mesAno === mesAnoKey);
       const isAtual = i === 0;
       const isFuturo = i > 0;
       let statusMes = null;
@@ -944,22 +1150,15 @@ export default function ObjetivoDetalhes() {
       });
     }
 
-    const thS = {
-      padding: "12px 14px", textAlign: "left", fontSize: 12,
-      color: T.textMuted, fontWeight: 500, whiteSpace: "nowrap",
-      borderRight: `0.5px solid ${T.border}`,
-    };
-    const tdS = {
-      padding: "11px 14px", fontSize: 13, color: T.textPrimary,
-      borderRight: `0.5px solid ${T.border}`, whiteSpace: "nowrap",
-    };
+    const thS = { padding: "12px 14px", textAlign: "left", fontSize: 12, color: T.textMuted, fontWeight: 500, whiteSpace: "nowrap", borderRight: `0.5px solid ${T.border}` };
+    const tdS = { padding: "11px 14px", fontSize: 13, color: T.textPrimary, borderRight: `0.5px solid ${T.border}`, whiteSpace: "nowrap" };
 
     function PillStatus({ s }) {
       if (!s) return <span style={{ color: T.textMuted, fontSize: 10 }}>—</span>;
       const map = {
         meta_batida: ["Meta Batida", "#22c55e", "rgba(34,197,94,0.12)"],
         meta_parcial: ["Meta Parcial", "#f59e0b", "rgba(245,158,11,0.12)"],
-        nao_bateu:   ["Não Bateu",   "#ef4444", "rgba(239,68,68,0.12)"],
+        nao_bateu: ["Não Bateu", "#ef4444", "rgba(239,68,68,0.12)"],
       };
       const [label, cor, bg] = map[s] || ["—", T.textMuted, "transparent"];
       return (
@@ -970,18 +1169,16 @@ export default function ObjetivoDetalhes() {
     }
 
     return (
-      <div>
-        {/* ── Histórico accordion ── */}
+      <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
         <div style={{ border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, marginBottom: 24, overflow: "hidden" }}>
           <button
             onClick={() => setHistoricoAberto(h => !h)}
             style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", background: "rgba(255,255,255,0.02)", border: "none", cursor: "pointer", color: T.textPrimary, fontFamily: T.fontFamily }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 13 }}>📋</span>
               <span style={{ fontSize: 13, fontWeight: 400 }}>Histórico Registrado</span>
               {temHistorico
-                ? <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>{historico.length} {historico.length === 1 ? "mês" : "meses"}</span>
+                ? <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 20, background: "rgba(34,197,94,0.15)", color: "#22c55e" }}>{hist.length} {hist.length === 1 ? "mês" : "meses"}</span>
                 : <span style={{ fontSize: 11, color: T.textMuted }}>— Nenhum dado registrado ainda</span>
               }
             </div>
@@ -995,32 +1192,27 @@ export default function ObjetivoDetalhes() {
                   Conforme os meses passarem, os dados registrados aparecerão aqui.
                 </div>
               )}
-              {temHistorico && historico
-                .slice()
-                .sort((a, b) => b.mesAno.localeCompare(a.mesAno))
-                .map((h, i) => {
-                  const lbl = new Date(h.mesAno + "-01").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-                  const aOk = (h.aporteRealizado || 0) >= aporte;
-                  const rOk = (h.rentabilidadeCarteira || 0) >= metaRentPct;
-                  const st = aOk && rOk ? "meta_batida" : aOk || rOk ? "meta_parcial" : "nao_bateu";
-                  return (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px", borderBottom: i < historico.length - 1 ? `0.5px solid ${T.border}` : "none", fontSize: 12 }}>
-                      <span style={{ color: T.textPrimary, textTransform: "capitalize" }}>{lbl}</span>
-                      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-                        <span style={{ color: T.textSecondary }}>Carteira: {brl(h.valorCarteira || 0)}</span>
-                        <span style={{ color: T.textSecondary }}>Aporte: {brl(h.aporteRealizado || 0)}</span>
-                        <span style={{ color: T.textSecondary }}>Rent.: {(h.rentabilidadeCarteira || 0).toFixed(2)}%</span>
-                        <PillStatus s={st} />
-                      </div>
+              {temHistorico && hist.slice().sort((a, b) => b.mesAno.localeCompare(a.mesAno)).map((h, i) => {
+                const lbl = new Date(h.mesAno + "-01").toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+                const aOk = (h.aporteRealizado || 0) >= aporte;
+                const rOk = (h.rentabilidadeCarteira || 0) >= metaRentPct;
+                const st = aOk && rOk ? "meta_batida" : aOk || rOk ? "meta_parcial" : "nao_bateu";
+                return (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 18px", borderBottom: i < hist.length - 1 ? `0.5px solid ${T.border}` : "none", fontSize: 12 }}>
+                    <span style={{ color: T.textPrimary, textTransform: "capitalize" }}>{lbl}</span>
+                    <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                      <span style={{ color: T.textSecondary }}>Carteira: {brl(h.valorCarteira || 0)}</span>
+                      <span style={{ color: T.textSecondary }}>Aporte: {brl(h.aporteRealizado || 0)}</span>
+                      <span style={{ color: T.textSecondary }}>Rent.: {(h.rentabilidadeCarteira || 0).toFixed(2)}%</span>
+                      <PillStatus s={st} />
                     </div>
-                  );
-                })
-              }
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* ── Cabeçalho da tabela ── */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
           <div>
             <div style={{ fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: T.textMuted, marginBottom: 3 }}>
@@ -1031,12 +1223,11 @@ export default function ObjetivoDetalhes() {
             </div>
           </div>
           <div style={{ fontSize: 11, color: T.textSecondary, textAlign: "right" }}>
-            Meta final: {brl(meta)}<br/>
+            Meta final: {brl(meta)}<br />
             <span style={{ color: T.textMuted }}>Aporte comprometido: {brl(aporte)}/mês</span>
           </div>
         </div>
 
-        {/* ── Tabela ── */}
         <div style={{ background: "rgba(255,255,255,0.02)", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 740 }}>
             <thead>
@@ -1056,9 +1247,7 @@ export default function ObjetivoDetalhes() {
                 const isEditing = editandoMes === linha.mesAnoKey;
                 const rowBg = isEditing
                   ? "rgba(240,162,2,0.08)"
-                  : linha.isAtual
-                  ? "rgba(240,162,2,0.05)"
-                  : "transparent";
+                  : linha.isAtual ? "rgba(240,162,2,0.05)" : "transparent";
 
                 const dataRow = (
                   <tr
@@ -1080,9 +1269,7 @@ export default function ObjetivoDetalhes() {
                         {linha.mesLabel}{linha.isAtual && " ●"}
                       </span>
                     </td>
-                    <td style={{ ...tdS, textAlign: "right", color: T.textSecondary }}>
-                      {brl(linha.patrimonioAlvo)}
-                    </td>
+                    <td style={{ ...tdS, textAlign: "right", color: T.textSecondary }}>{brl(linha.patrimonioAlvo)}</td>
                     <td style={{ ...tdS, textAlign: "right" }}>
                       {linha.valorCarteira != null
                         ? <span style={{ color: linha.valorCarteira >= linha.patrimonioAlvo ? "#22c55e" : T.textPrimary }}>{brl(linha.valorCarteira)}</span>
@@ -1182,7 +1369,6 @@ export default function ObjetivoDetalhes() {
           </table>
         </div>
 
-        {/* Legenda */}
         <div style={{ marginTop: 14, display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: T.textMuted, lineHeight: 1.8 }}>
           <span><span style={{ color: "#22c55e" }}>●</span> Meta Batida — aporte e rentabilidade atingidos</span>
           <span><span style={{ color: "#f59e0b" }}>●</span> Meta Parcial — apenas uma meta atingida</span>
@@ -1193,68 +1379,68 @@ export default function ObjetivoDetalhes() {
     );
   };
 
-  // ── SEÇÃO 5: ATIVOS (PREPARADO) ──
+  // ── ATIVOS ──
   const Ativos = () => (
-    <div>
-      <div style={{ fontSize: 13, color: T.textSecondary, marginBottom: 16, fontWeight: 500 }}>
-        ATIVOS VINCULADOS A ESTE OBJETIVO
+    <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
+      <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 16, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+        Ativos Vinculados a Este Objetivo
       </div>
       <div style={{
-        background: "rgba(255,255,255,0.03)",
+        background: "rgba(255,255,255,0.02)",
         border: `0.5px solid ${T.border}`,
         borderRadius: T.radiusMd,
-        padding: "24px",
-        textAlign: "center"
+        padding: "32px 24px",
+        textAlign: "center",
       }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>💼</div>
         <div style={{ fontSize: 14, color: T.textPrimary, marginBottom: 8, fontWeight: 500 }}>
           Nenhum ativo vinculado ainda
         </div>
-        <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6 }}>
-          Quando você vincular ativos da sua carteira de investimentos a este objetivo,<br/>
-          você poderá acompanhar o desempenho em tempo real aqui.
+        <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.7 }}>
+          Quando você vincular ativos da sua carteira de investimentos a este objetivo,<br />
+          você poderá acompanhar o desempenho e a rentabilidade real em tempo real aqui.
         </div>
       </div>
       <div style={{
         marginTop: 16,
-        padding: "12px 14px",
-        background: "rgba(255,255,255,0.03)",
+        padding: "12px 16px",
+        background: "rgba(255,255,255,0.02)",
         border: `0.5px solid ${T.border}`,
         borderRadius: T.radiusMd,
         fontSize: 12,
-        color: T.textSecondary
+        color: T.textSecondary,
+        lineHeight: 1.7,
       }}>
-        📌 Em breve você poderá visualizar seus ativos (ações, FIIs, ETFs) e como estão contribuindo para realizar este sonho.
+        Em breve você poderá visualizar seus ativos (ações, FIIs, ETFs, renda fixa) e como cada um contribui para realizar este objetivo — incluindo a rentabilidade real calculada automaticamente.
       </div>
     </div>
   );
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg }}>
+    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: T.fontFamily }}>
+      <style>{`
+        @keyframes objFadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       <Navbar />
       <div style={{ padding: "20px" }}>
-
         <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-          {/* Botão Voltar */}
+
+          {/* Botão voltar */}
           <button
             onClick={() => navigate(-1)}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              background: "none", border: "none",
-              color: T.textMuted, cursor: "pointer",
-              fontSize: 12, marginBottom: 20, padding: 0,
-              fontFamily: T.fontFamily, letterSpacing: "0.06em",
-              textTransform: "uppercase", transition: "color 0.2s"
-            }}
-            onMouseEnter={e => e.currentTarget.style.color = T.textPrimary}
+            style={{ ...C.backBtn, marginBottom: 20 }}
+            onMouseEnter={e => e.currentTarget.style.color = T.textSecondary}
             onMouseLeave={e => e.currentTarget.style.color = T.textMuted}
           >
             ← Voltar
           </button>
 
           <Cabecalho />
-
-          <Abas ativa={abaAtiva} onChange={setAbaAtiva} />
+          <Abas />
 
           {abaAtiva === "resumo" && <Resumo />}
           {abaAtiva === "simulador" && <Planos />}

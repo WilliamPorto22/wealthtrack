@@ -1,12 +1,13 @@
 // services/cotacoesReais.js
 
-// Horário de mercado: 10h–17h (Brasília, UTC-3)
 export const HORARIO_MERCADO = { abertura: 10, fechamento: 17 };
-export const INTERVALO_ATUALIZACAO = 2 * 60 * 60 * 1000; // 2 horas em ms
+export const INTERVALO_ATUALIZACAO = 1 * 60 * 60 * 1000; // 1 hora em ms
+
+// Token gratuito: cadastre em https://brapi.dev para obter o seu
+const BRAPI_TOKEN = 'SEU_TOKEN_AQUI';
 
 export function mercadoAberto() {
   const agora = new Date();
-  // Converter para horário de Brasília (UTC-3)
   const brasiliaOffset = -3 * 60;
   const utc = agora.getTime() + agora.getTimezoneOffset() * 60000;
   const brasilia = new Date(utc + brasiliaOffset * 60000);
@@ -33,113 +34,170 @@ export function proximoHorarioAtualizacao() {
   if (hora >= HORARIO_MERCADO.fechamento) {
     return `amanhã às ${HORARIO_MERCADO.abertura}h`;
   }
-  // Dentro do horário — próxima atualização em 2h
-  const proximaHora = hora + 2;
+  const proximaHora = hora + 1;
   return `${String(proximaHora).padStart(2, '0')}h${minutos > 0 ? String(minutos).padStart(2, '0') : ''}`;
 }
 
-// Busca Dólar no Banco Central (oficial, gratuito)
 async function buscarDolar() {
   try {
-    const hoje = new Date();
-    const dd = String(hoje.getDate()).padStart(2, '0');
-    const mm = String(hoje.getMonth() + 1).padStart(2, '0');
-    const yyyy = hoje.getFullYear();
-    const dataStr = `${mm}-${dd}-${yyyy}`;
-
-    const url = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarDia(dataCotacao=@dataCotacao)?@dataCotacao='${dataStr}'&$top=1&$format=json`;
-    const res = await fetch(url);
-    const json = await res.json();
-    const items = json?.value;
-
-    if (items && items.length > 0) {
-      const valor = items[items.length - 1].cotacaoCompra;
-      return { valor, tipo: "Banco Central" };
-    }
-
-    // Se não há cotação hoje (fim de semana/feriado), busca última disponível
-    const urlUltima = `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@di,dataFinalCotacao=@df)?@di='01-01-${yyyy}'&@df='${mm}-${dd}-${yyyy}'&$top=1&$orderby=dataHoraCotacao%20desc&$format=json`;
-    const res2 = await fetch(urlUltima);
-    const json2 = await res2.json();
-    if (json2?.value?.length > 0) {
-      return { valor: json2.value[0].cotacaoCompra, tipo: "Último disponível" };
-    }
-  } catch (e) {
-    console.error("Erro dólar:", e);
-  }
-  return { valor: 5.87, tipo: "Fallback" };
-}
-
-// Busca índice de mercado via brapi.dev (CORS suportado, gratuito para cotações básicas)
-async function buscarIndice(ticker) {
-  try {
-    const encoded = encodeURIComponent(ticker); // ex: ^BVSP → %5EBVSP
-    const url = `https://brapi.dev/api/quote/${encoded}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    const r = json?.results?.[0];
-    if (!r?.regularMarketPrice) throw new Error("Sem dados");
-    const variacao = r.regularMarketChangePercent ?? 0;
+    const r = await fetch('https://economia.awesomeapi.com.br/json/last/USD-BRL', {
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const usd = data.USDBRL;
+    const valor = parseFloat(usd.bid);
+    const variacao = parseFloat(usd.pctChange);
     return {
-      valor: r.regularMarketPrice,
+      valor,
       variacao,
-      tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje`,
+      tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje`
     };
   } catch (e) {
-    console.warn(`Cotação ${ticker} indisponível:`, e.message);
+    console.warn('Dólar indisponível:', e.message);
     return null;
   }
 }
 
-// Busca Selic no Banco Central
-async function buscarSelic() {
+async function buscarIbovespa() {
   try {
-    const res = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json");
-    const json = await res.json();
-    if (json?.[0]?.valor) {
-      const anual = parseFloat(json[0].valor.replace(",", "."));
-      return { valor: anual, tipo: "a.a." };
-    }
+    const r = await fetch('https://mfinance.com.br/api/v1/stocks/IBOV', {
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const variacao = data.change ?? 0;
+    return {
+      valor: data.lastPrice,
+      variacao,
+      tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje`
+    };
   } catch (e) {
-    console.error("Erro Selic:", e);
+    console.warn('Ibovespa indisponível:', e.message);
+    return null;
   }
-  return { valor: 14.75, tipo: "a.a." };
 }
 
-// Busca IPCA no Banco Central
-async function buscarIPCA() {
+async function buscarSP500() {
+  // Tentativa 1: Yahoo Finance via proxy CORS (sem token, dados idênticos ao Google Finance)
   try {
-    const res = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.13522/dados/ultimos/1?formato=json");
+    const yahooUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=1d&range=1d';
+    const r = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(yahooUrl)}`, {
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const meta = data.chart?.result?.[0]?.meta;
+    if (!meta?.regularMarketPrice) throw new Error('Sem dados');
+    const price = meta.regularMarketPrice;
+    const prev = meta.chartPreviousClose || meta.previousClose;
+    const variacao = prev ? ((price - prev) / prev) * 100 : 0;
+    return {
+      valor: price,
+      variacao,
+      tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje`
+    };
+  } catch (e) {
+    console.warn('S&P 500 Yahoo (proxy):', e.message);
+  }
+
+  // Tentativa 2: brapi.dev com token (se configurado)
+  if (BRAPI_TOKEN && BRAPI_TOKEN !== 'SEU_TOKEN_AQUI') {
+    try {
+      const r = await fetch(`https://brapi.dev/api/quote/%5EGSPC?token=${BRAPI_TOKEN}`, {
+        signal: AbortSignal.timeout(8000)
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      const quote = data.results?.[0];
+      if (!quote?.regularMarketPrice) throw new Error('Sem dados');
+      const variacao = quote.regularMarketChangePercent ?? 0;
+      return {
+        valor: quote.regularMarketPrice,
+        variacao,
+        tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje`
+      };
+    } catch (e) {
+      console.warn('S&P 500 brapi (token):', e.message);
+    }
+  }
+
+  // Tentativa 3: brapi.dev sem token
+  try {
+    const r = await fetch('https://brapi.dev/api/quote/%5EGSPC', {
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const quote = data.results?.[0];
+    if (!quote?.regularMarketPrice) throw new Error('Sem dados');
+    const variacao = quote.regularMarketChangePercent ?? 0;
+    return {
+      valor: quote.regularMarketPrice,
+      variacao,
+      tipo: variacao >= 0 ? `+${variacao.toFixed(2)}% hoje` : `${variacao.toFixed(2)}% hoje`
+    };
+  } catch (e) {
+    console.warn('S&P 500 brapi (sem token):', e.message);
+  }
+
+  // Fallback localStorage (ignora valor 0 ou desatualizado)
+  try {
+    const stored = localStorage.getItem('wealthtrack_cotacoes');
+    if (stored) {
+      const data = JSON.parse(stored);
+      if (data.sp500?.valor > 0) return data.sp500;
+    }
+  } catch {}
+
+  return null;
+}
+
+async function buscarSelic() {
+  try {
+    const res = await fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json');
     const json = await res.json();
     if (json?.[0]?.valor) {
-      return { valor: parseFloat(json[0].valor.replace(",", ".")), tipo: "12 meses" };
+      const anual = parseFloat(json[0].valor.replace(',', '.'));
+      return { valor: anual, variacao: null, tipo: 'a.a.' };
     }
   } catch (e) {
-    console.error("Erro IPCA:", e);
+    console.error('Erro Selic:', e);
   }
-  return { valor: 4.14, tipo: "12 meses" };
+  return { valor: 14.75, variacao: null, tipo: 'a.a.' };
+}
+
+async function buscarIPCA() {
+  try {
+    const res = await fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.13522/dados/ultimos/1?formato=json');
+    const json = await res.json();
+    if (json?.[0]?.valor) {
+      return { valor: parseFloat(json[0].valor.replace(',', '.')), variacao: null, tipo: '12 meses' };
+    }
+  } catch (e) {
+    console.error('Erro IPCA:', e);
+  }
+  return { valor: 4.14, variacao: null, tipo: '12 meses' };
 }
 
 export async function obterTodasAsCotacoes() {
   const [dolar, ibovespa, sp500, selic, ipca] = await Promise.allSettled([
     buscarDolar(),
-    buscarIndice("^BVSP"),
-    buscarIndice("^GSPC"),
+    buscarIbovespa(),
+    buscarSP500(),
     buscarSelic(),
     buscarIPCA(),
   ]);
 
   return {
-    dolar:    dolar.status    === "fulfilled" ? dolar.value    : { valor: 5.87,   tipo: "Fallback" },
-    ibovespa: ibovespa.status === "fulfilled" ? ibovespa.value : { valor: 130000, tipo: "Fallback" },
-    sp500:    sp500.status    === "fulfilled" ? sp500.value    : { valor: 5500,   tipo: "Fallback" },
-    selic:    selic.status    === "fulfilled" ? selic.value    : { valor: 14.75,  tipo: "a.a." },
-    ipca:     ipca.status     === "fulfilled" ? ipca.value     : { valor: 4.14,   tipo: "12 meses" },
+    dolar:    dolar.status    === 'fulfilled' && dolar.value    ? dolar.value    : { valor: 5.08,   variacao: 0, tipo: 'Fallback' },
+    ibovespa: ibovespa.status === 'fulfilled' && ibovespa.value ? ibovespa.value : { valor: 197000, variacao: 0, tipo: 'Fallback' },
+    sp500:    sp500.status    === 'fulfilled' && sp500.value    ? sp500.value    : { valor: 7000,   variacao: 0, tipo: 'Fallback' },
+    selic:    selic.status    === 'fulfilled' ? selic.value     : { valor: 14.75, variacao: null, tipo: 'a.a.' },
+    ipca:     ipca.status     === 'fulfilled' ? ipca.value      : { valor: 4.14,  variacao: null, tipo: '12 meses' },
   };
 }
 
-// Hook para acessar cotações em componentes React
 export function useCotacoesReais() {
   return {
     obterIPCA: buscarIPCA,

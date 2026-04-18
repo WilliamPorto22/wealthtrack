@@ -40,7 +40,8 @@
       "Bash(gh api *)",
       "Bash(cat .env)",
       "Bash(cat .env.production)",
-      "Bash(ls *.json)"
+      "Bash(ls *.json)",
+      "Bash(grep -E \"\\\\.\\(jsx|js|json\\)$\")"
     ]
   }
 }

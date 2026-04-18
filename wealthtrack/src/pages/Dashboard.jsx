@@ -230,33 +230,33 @@ function formatarCotacoes(cotacoes) {
   return [
     {
       label: "Dólar",
-      valor: `R$ ${cotacoes.dolar?.valor?.toFixed(2) || "5,08"}`,
+      valor: `R$ ${cotacoes.dolar?.valor?.toFixed(2)?.replace(".", ",") || "5,08"}`,
       sub: cotacoes.dolar?.tipo || "Histórico diário",
-      cor: "#ef4444"
+      cor: (cotacoes.dolar?.variacao ?? 0) >= 0 ? "#22c55e" : "#ef4444"
     },
     {
       label: "Selic",
-      valor: `${cotacoes.selic?.valor?.toFixed(2) || "14,75"}%`,
-      sub: cotacoes.selic?.tipo || "Último relatório",
+      valor: `${cotacoes.selic?.valor?.toFixed(2)?.replace(".", ",") || "14,75"}%`,
+      sub: cotacoes.selic?.tipo || "a.a.",
       cor: "#6b7280"
     },
     {
       label: "IPCA",
-      valor: `${cotacoes.ipca?.valor?.toFixed(2) || "4,14"}%`,
-      sub: cotacoes.ipca?.tipo || "Últimos 12 meses",
+      valor: `${cotacoes.ipca?.valor?.toFixed(2)?.replace(".", ",") || "4,14"}%`,
+      sub: cotacoes.ipca?.tipo || "12 meses",
       cor: "#6b7280"
     },
     {
       label: "Ibovespa",
       valor: `${Math.round(cotacoes.ibovespa?.valor || 197000).toLocaleString("pt-BR")}`,
       sub: cotacoes.ibovespa?.tipo || "Histórico do dia",
-      cor: "#22c55e"
+      cor: (cotacoes.ibovespa?.variacao ?? 0) >= 0 ? "#22c55e" : "#ef4444"
     },
     {
       label: "S&P 500",
       valor: `${Math.round(cotacoes.sp500?.valor || 5396).toLocaleString("pt-BR")}`,
       sub: cotacoes.sp500?.tipo || "Histórico do dia",
-      cor: "#22c55e"
+      cor: (cotacoes.sp500?.variacao ?? 0) >= 0 ? "#22c55e" : "#ef4444"
     }
   ];
 }
@@ -281,7 +281,7 @@ export default function Dashboard(){
       const cotacoes=await obterTodasAsCotacoes();
       const formatted=formatarCotacoes(cotacoes);
       setMercado(formatted);
-      setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR"));
+      setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
 
       // Salvar em localStorage para fallback
       localStorage.setItem("wealthtrack_cotacoes",JSON.stringify({
@@ -421,45 +421,39 @@ export default function Dashboard(){
         actionButtons={[
           {
             icon: atualizando ? "⟳" : "↻",
-            label: statusMercado ? "Atualizar" : "Mercado fechado",
             onClick: atualizarCotacoesServidor,
             disabled: atualizando,
-            title: statusMercado ? "Mercado aberto - Atualizar cotações" : "Mercado fechado - Atualizações retomam amanhã às 9h",
-            variant: statusMercado ? "secondary" : ""
+            title: statusMercado ? "Atualizar cotações" : "Mercado fechado · Atualizar manualmente",
+            variant: "secondary"
           }
         ]}
       />
 
       <div className="dashboard-content">
 
-        {/* STATUS DO MERCADO E ÚLTIMA ATUALIZAÇÃO */}
-        {(ultimaAtualizacao || !statusMercado) && (
-          <div style={{
-            fontSize: "11px",
-            color: "#3E5C76",
-            marginBottom: "16px",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            paddingBottom: "12px",
-            borderBottom: "0.5px solid rgba(255, 255, 255, 0.07)"
-          }}>
-            <div>
-              {statusMercado ? (
-                <span style={{ color: "#22c55e" }}>
-                  ✓ Mercado aberto (9h-18h)
-                </span>
-              ) : (
-                <span>Mercado fechado · Próxima atualização: 9h</span>
-              )}
-            </div>
-            {ultimaAtualizacao && (
-              <div style={{ textAlign: "right" }}>
-                Última atualização: {ultimaAtualizacao}
-              </div>
-            )}
-          </div>
-        )}
+
+        {/* BARRA DE STATUS DO MERCADO */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 10,
+          color: "#3E5C76",
+          marginBottom: 8,
+          letterSpacing: "0.03em",
+        }}>
+          <span>{new Date().toLocaleDateString("pt-BR")}</span>
+          <span style={{ opacity: 0.4 }}>•</span>
+          <span style={{ color: statusMercado ? "#22c55e" : "#748CAB" }}>
+            {statusMercado ? "● MERCADO ABERTO" : "● MERCADO FECHADO"}
+          </span>
+          {ultimaAtualizacao && (
+            <>
+              <span style={{ opacity: 0.4 }}>•</span>
+              <span>Última atualização: {ultimaAtualizacao}</span>
+            </>
+          )}
+        </div>
 
         {/* INDICADORES DE MERCADO */}
         <div className="market-indicators">

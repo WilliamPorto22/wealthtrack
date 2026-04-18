@@ -20,12 +20,6 @@ export function Navbar({
 }) {
   const navigate = useNavigate();
 
-  const hoje = new Date().toLocaleDateString("pt-BR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
   return (
     <nav className="navbar navbar-container">
       {/* Logo + Branding */}
@@ -59,7 +53,6 @@ export function Navbar({
           </div>
         )}
 
-        <span className="navbar-date">{hoje}</span>
       </div>
 
       {/* Right: Ações + Logout */}
