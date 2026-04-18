@@ -493,22 +493,29 @@ export default function ClienteFicha() {
   const alertaContato = snap.nextContactDate&&contatoVencido(snap.nextContactDate);
   const alertaViradaMes = hoje.getDate()===1&&id!=="novo";
   const dataRevisao = formatarData(ultimaRevisao);
-  function revisaoPendente(){
-    if(!ultimaRevisao) return true;
+  // Data normalizada da revisão (00:00) e de hoje (00:00) para comparação só por dia
+  const revDate = (()=>{
+    if(!ultimaRevisao) return null;
     try{
       const r=ultimaRevisao.toDate?ultimaRevisao.toDate():new Date(ultimaRevisao);
-      if(r.getMonth()===hoje.getMonth()&&r.getFullYear()===hoje.getFullYear()) return false;
-      return hoje.getDate()>15;
-    }catch{return true;}
+      if(isNaN(r)) return null;
+      const d=new Date(r); d.setHours(0,0,0,0); return d;
+    }catch{return null;}
+  })();
+  const hojeDia = (()=>{const d=new Date(hoje); d.setHours(0,0,0,0); return d;})();
+  const revisaoAgendada = !!revDate && revDate.getTime() > hojeDia.getTime();
+  const revisaoFeitaMes = (()=>{
+    if(!revDate) return false;
+    if(revDate.getTime()>hojeDia.getTime()) return false;
+    return revDate.getMonth()===hojeDia.getMonth()&&revDate.getFullYear()===hojeDia.getFullYear();
+  })();
+  function revisaoPendente(){
+    if(!revDate) return true;
+    if(revisaoAgendada) return false;
+    if(revDate.getMonth()===hojeDia.getMonth()&&revDate.getFullYear()===hojeDia.getFullYear()) return false;
+    return hojeDia.getDate()>15;
   }
   const pendente = id!=="novo"&&revisaoPendente();
-  const revisaoFeitaMes = (()=>{
-    if(!ultimaRevisao) return false;
-    try{
-      const r=ultimaRevisao.toDate?ultimaRevisao.toDate():new Date(ultimaRevisao);
-      return r.getMonth()===hoje.getMonth()&&r.getFullYear()===hoje.getFullYear();
-    }catch{return false;}
-  })();
 
   const liquidezReserva = parseCentavos(snap.carteira?.liquidezD1)/100||parseCentavos(snap.carteira?.posFixado)/100;
   const reservaStatus = reservaMeta>0&&liquidezReserva>=reservaMeta
@@ -698,8 +705,12 @@ export default function ClienteFicha() {
       {modalRevisao&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:18,padding:"28px 24px",width:320,maxWidth:"100%"}}>
-            <div style={{fontSize:16,fontWeight:300,color:T.textPrimary,marginBottom:4,...noEdit}}>Marcar revisão</div>
-            <div style={{fontSize:12,color:T.textMuted,marginBottom:20,...noEdit}}>Confirme a data da revisão realizada</div>
+            <div style={{fontSize:16,fontWeight:300,color:T.textPrimary,marginBottom:4,...noEdit}}>
+              {revDate?(revisaoAgendada?"Editar agendamento":"Editar revisão"):"Marcar revisão"}
+            </div>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:20,...noEdit}}>
+              {revDate?"Ajuste a data — se for futura, ficará como agendada.":"Data passada/hoje = revisão feita · futura = agendada."}
+            </div>
             <input style={{...C.input,marginBottom:16}} type="date"
               value={dataRevisaoInput}
               onChange={e=>setDataRevisaoInput(e.target.value)}
@@ -752,54 +763,115 @@ export default function ClienteFicha() {
           </div>
         )}
 
-        {/* ─── HERO CARD ─────────────────────────────────────────── */}
-        <div style={{background:"linear-gradient(145deg,rgba(29,45,68,0.95),rgba(13,19,33,0.98))",border:`0.5px solid ${T.border}`,borderRadius:20,padding:"20px",marginBottom:12,boxShadow:"0 6px 32px rgba(0,0,0,0.5)"}}>
+        {/* ─── HERO CARD — Redesign Premium ────────────────────────── */}
+        <div style={{
+          position:"relative",
+          background:"linear-gradient(150deg,rgba(36,55,83,0.92) 0%,rgba(20,31,51,0.96) 55%,rgba(13,19,33,0.98) 100%)",
+          border:"0.5px solid rgba(240,162,2,0.18)",
+          borderRadius:22,
+          padding:"26px 24px 22px",
+          marginBottom:14,
+          boxShadow:"0 20px 60px -20px rgba(0,0,0,0.7), 0 2px 0 rgba(255,255,255,0.04) inset",
+          overflow:"hidden",
+        }}>
+          {/* Ambient glows (decorative, non-interactive) */}
+          <div style={{position:"absolute",top:-120,right:-120,width:340,height:340,background:"radial-gradient(circle,rgba(240,162,2,0.10) 0%,transparent 65%)",pointerEvents:"none",filter:"blur(10px)"}}/>
+          <div style={{position:"absolute",bottom:-140,left:-100,width:360,height:360,background:"radial-gradient(circle,rgba(25,130,196,0.08) 0%,transparent 65%)",pointerEvents:"none",filter:"blur(10px)"}}/>
 
-          {/* Avatar + Nome + badges */}
-          <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18}}>
-            {/* Avatar sem badge flutuante */}
-            <AvatarIcon tipo={snap.avatar} size={64}/>
+          {/* Header — Avatar + Nome + Status */}
+          <div style={{position:"relative",display:"flex",alignItems:"flex-start",gap:18,marginBottom:22}}>
+            {/* Avatar com anel de glow */}
+            <div style={{position:"relative",flexShrink:0}}>
+              <div style={{position:"absolute",inset:-4,borderRadius:18,background:"linear-gradient(135deg,rgba(240,162,2,0.35),rgba(240,162,2,0.02))",filter:"blur(12px)",opacity:0.55,pointerEvents:"none"}}/>
+              <div style={{position:"relative"}}>
+                <AvatarIcon tipo={snap.avatar} size={72}/>
+              </div>
+            </div>
 
             {/* Info */}
             <div style={{flex:1,minWidth:0}}>
-              {/* Nome + segmento inline */}
-              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
-                <div style={{fontSize:22,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.01em",lineHeight:1.2,...noEdit}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+                <div style={{fontSize:24,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.02em",lineHeight:1.15,...noEdit}}>
                   {snap.nome||"Novo cliente"}
                 </div>
                 {segmento&&(
-                  <span style={{fontSize:10,padding:"3px 10px",borderRadius:20,background:"rgba(240,162,2,0.15)",color:"#F0A202",border:"0.5px solid rgba(240,162,2,0.4)",letterSpacing:"0.06em",fontWeight:500,whiteSpace:"nowrap",...noEdit}}>
+                  <span style={{fontSize:9,padding:"4px 11px",borderRadius:20,background:"linear-gradient(135deg,rgba(240,162,2,0.22),rgba(240,162,2,0.08))",color:"#FFB20F",border:"0.5px solid rgba(240,162,2,0.5)",letterSpacing:"0.12em",fontWeight:600,whiteSpace:"nowrap",textTransform:"uppercase",boxShadow:"0 2px 12px rgba(240,162,2,0.2)",...noEdit}}>
                     {segmento}
                   </span>
                 )}
               </div>
-              <div style={{fontSize:12,color:T.textSecondary,lineHeight:1.5,...noEdit}}>
+              <div style={{fontSize:13,color:T.textSecondary,lineHeight:1.5,letterSpacing:"0.01em",...noEdit}}>
                 {[snap.profissao,snap.uf?snap.uf.split("–")[0].trim():null,idade?`${idade} anos`:null].filter(Boolean).join(" · ")}
               </div>
-              <div style={{fontSize:11,marginTop:5,...noEdit,color:pendente?"#f59e0b":"#3E5C76"}}>
-                {pendente?"⚠ Revisão pendente este mês":`✓ Revisado em ${dataRevisao}`}
-              </div>
+              {(()=>{
+                const st = revisaoAgendada
+                  ? {cor:"#60a5fa",bg:"rgba(96,165,250,0.1)",br:"rgba(96,165,250,0.32)",lbl:`Agendada para ${dataRevisao}`}
+                  : pendente
+                  ? {cor:"#fbbf24",bg:"rgba(245,158,11,0.08)",br:"rgba(245,158,11,0.28)",lbl:"Revisão pendente este mês"}
+                  : {cor:"#86efac",bg:"rgba(34,197,94,0.08)",br:"rgba(34,197,94,0.28)",lbl:`Revisado em ${dataRevisao}`};
+                const dot = revisaoAgendada?"#60a5fa":pendente?"#f59e0b":"#22c55e";
+                return (
+                  <div style={{marginTop:10,...noEdit,display:"inline-flex",alignItems:"center",gap:7,padding:"4px 11px",borderRadius:14,fontSize:11,fontWeight:500,color:st.cor,background:st.bg,border:`0.5px solid ${st.br}`}}>
+                    <span style={{width:6,height:6,borderRadius:"50%",background:dot,boxShadow:`0 0 8px ${dot}`}}/>
+                    {st.lbl}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
           {/* Botões de ação */}
           {id!=="novo"&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-              {/* Marcar revisão */}
-              {revisaoFeitaMes?(
-                <div style={{padding:"8px 10px",background:"rgba(34,197,94,0.08)",border:"0.5px solid rgba(34,197,94,0.35)",borderRadius:9,textAlign:"center",...noEdit}}>
-                  <div style={{fontSize:11,fontWeight:600,color:"#22c55e",marginBottom:1}}>✓ Revisão mensal feita</div>
-                  {dataRevisao&&<div style={{fontSize:9,color:"#86efac",opacity:0.8}}>{dataRevisao}</div>}
-                </div>
-              ):(
-                <button
-                  onClick={()=>{setDataRevisaoInput(hoje.toISOString().split("T")[0]);setModalRevisao(true);}}
-                  disabled={marcandoRevisao}
-                  style={{padding:"8px 10px",background:"rgba(240,162,2,0.07)",border:"0.5px solid rgba(240,162,2,0.28)",borderRadius:9,color:"#F0A202",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.03em",textAlign:"center",fontWeight:500,...noEdit}}
-                >
-                  {marcandoRevisao?"Salvando...":"Marcar revisão"}
-                </button>
-              )}
+            <div style={{position:"relative",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+              {/* Marcar / editar revisão — 3 estados */}
+              {(()=>{
+                const abrirModal = ()=>{
+                  const iso = revDate
+                    ? `${revDate.getFullYear()}-${String(revDate.getMonth()+1).padStart(2,"0")}-${String(revDate.getDate()).padStart(2,"0")}`
+                    : hoje.toISOString().split("T")[0];
+                  setDataRevisaoInput(iso);
+                  setModalRevisao(true);
+                };
+                if(revisaoAgendada){
+                  return (
+                    <button
+                      onClick={abrirModal}
+                      disabled={marcandoRevisao}
+                      style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"11px 12px",background:"linear-gradient(135deg,rgba(96,165,250,0.14),rgba(96,165,250,0.04))",border:"0.5px solid rgba(96,165,250,0.42)",borderRadius:12,color:"#60a5fa",fontSize:12,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.02em",fontWeight:600,minHeight:52,transition:"all 0.25s ease",...noEdit}}
+                      onMouseEnter={e=>{e.currentTarget.style.background="linear-gradient(135deg,rgba(96,165,250,0.22),rgba(96,165,250,0.06))";}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="linear-gradient(135deg,rgba(96,165,250,0.14),rgba(96,165,250,0.04))";}}
+                    >
+                      <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:13,lineHeight:1}}>📅</span> Revisão agendada</div>
+                      {dataRevisao&&<div style={{fontSize:12,opacity:0.9,marginTop:3,fontWeight:500}}>{dataRevisao}</div>}
+                    </button>
+                  );
+                }
+                if(revisaoFeitaMes){
+                  return (
+                    <button
+                      onClick={abrirModal}
+                      disabled={marcandoRevisao}
+                      style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"11px 12px",background:"linear-gradient(135deg,rgba(34,197,94,0.14),rgba(34,197,94,0.04))",border:"0.5px solid rgba(34,197,94,0.4)",borderRadius:12,color:"#22c55e",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:600,letterSpacing:"0.02em",minHeight:52,transition:"all 0.25s ease",...noEdit}}
+                      onMouseEnter={e=>{e.currentTarget.style.background="linear-gradient(135deg,rgba(34,197,94,0.22),rgba(34,197,94,0.06))";}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="linear-gradient(135deg,rgba(34,197,94,0.14),rgba(34,197,94,0.04))";}}
+                    >
+                      <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:13,lineHeight:1}}>✓</span> Revisão mensal feita</div>
+                      {dataRevisao&&<div style={{fontSize:12,opacity:0.9,marginTop:3,fontWeight:500}}>{dataRevisao}</div>}
+                    </button>
+                  );
+                }
+                return (
+                  <button
+                    onClick={abrirModal}
+                    disabled={marcandoRevisao}
+                    style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"11px 12px",background:"linear-gradient(135deg,rgba(240,162,2,0.12),rgba(240,162,2,0.03))",border:"0.5px solid rgba(240,162,2,0.38)",borderRadius:12,color:"#F0A202",fontSize:12,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.03em",fontWeight:600,minHeight:52,transition:"all 0.25s ease",...noEdit}}
+                    onMouseEnter={e=>{e.currentTarget.style.background="linear-gradient(135deg,rgba(240,162,2,0.22),rgba(240,162,2,0.05))";e.currentTarget.style.borderColor="rgba(240,162,2,0.55)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="linear-gradient(135deg,rgba(240,162,2,0.12),rgba(240,162,2,0.03))";e.currentTarget.style.borderColor="rgba(240,162,2,0.38)";}}
+                  >
+                    {marcandoRevisao?"Salvando...":"Marcar revisão"}
+                  </button>
+                );
+              })()}
 
               {/* Status de aporte do mês — inteligente */}
               {(()=>{
@@ -811,81 +883,87 @@ export default function ClienteFicha() {
 
                 let corBg, corBorder, corTexto, linha1, linha2;
                 if(bateuMeta){
-                  corBg="rgba(34,197,94,0.12)"; corBorder="rgba(34,197,94,0.45)"; corTexto="#22c55e";
+                  corBg="linear-gradient(135deg,rgba(34,197,94,0.18),rgba(34,197,94,0.05))"; corBorder="rgba(34,197,94,0.5)"; corTexto="#22c55e";
                   linha1="✓ Aporte Mês Feito";
                   linha2=moedaFull(aporteRegistradoVal);
                 } else if(abaixoMeta){
-                  corBg="rgba(245,158,11,0.09)"; corBorder="rgba(245,158,11,0.4)"; corTexto="#f59e0b";
+                  corBg="linear-gradient(135deg,rgba(245,158,11,0.14),rgba(245,158,11,0.03))"; corBorder="rgba(245,158,11,0.45)"; corTexto="#f59e0b";
                   linha1="Aporte Feito Parcial";
                   linha2=`${moedaFull(aporteRegistradoVal)} / ${moedaFull(metaReais)}`;
                 } else if(aportou){
-                  corBg="rgba(34,197,94,0.08)"; corBorder="rgba(34,197,94,0.3)"; corTexto="#22c55e";
+                  corBg="linear-gradient(135deg,rgba(34,197,94,0.12),rgba(34,197,94,0.03))"; corBorder="rgba(34,197,94,0.35)"; corTexto="#22c55e";
                   linha1="✓ Aporte Mês Feito";
                   linha2=aporteRegistradoVal>0?moedaFull(aporteRegistradoVal):"";
                 } else if(semAporte){
-                  corBg="rgba(239,68,68,0.08)"; corBorder="rgba(239,68,68,0.3)"; corTexto="#ef4444";
+                  corBg="linear-gradient(135deg,rgba(239,68,68,0.12),rgba(239,68,68,0.03))"; corBorder="rgba(239,68,68,0.35)"; corTexto="#ef4444";
                   linha1="✗ Não fez aporte"; linha2="no mês";
                 } else {
-                  corBg="rgba(255,255,255,0.03)"; corBorder="rgba(255,255,255,0.08)"; corTexto=T.textMuted;
+                  corBg="linear-gradient(135deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))"; corBorder="rgba(255,255,255,0.1)"; corTexto=T.textSecondary;
                   linha1="Aporte pendente"; linha2="";
                 }
                 return (
                   <button
-                    onClick={()=>toggleSection("aportes")}
-                    style={{padding:"8px 10px",background:corBg,border:`0.5px solid ${corBorder}`,borderRadius:9,color:corTexto,fontSize:11,cursor:"pointer",fontFamily:"inherit",textAlign:"center",lineHeight:1.4,...noEdit}}
+                    onClick={()=>navigate(`/cliente/${id}/carteira`)}
+                    style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"11px 12px",background:corBg,border:`0.5px solid ${corBorder}`,borderRadius:12,color:corTexto,fontSize:12,cursor:"pointer",fontFamily:"inherit",lineHeight:1.35,minHeight:52,transition:"all 0.25s ease",...noEdit}}
+                    onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.filter="brightness(1.1)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.filter="brightness(1)";}}
                   >
-                    <div style={{fontWeight:600,fontSize:11}}>{linha1}</div>
-                    {linha2&&<div style={{fontSize:9,opacity:0.75,marginTop:1}}>{linha2}</div>}
+                    <div style={{fontWeight:600,fontSize:12,letterSpacing:"0.02em"}}>{linha1}</div>
+                    {linha2&&<div style={{fontSize:12,opacity:0.9,marginTop:3,fontWeight:500}}>{linha2}</div>}
                   </button>
                 );
               })()}
             </div>
           )}
 
-          {/* KPI strip — grade 2×2 */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {/* KPI strip — grade 2×2 premium */}
+          <div style={{position:"relative",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             {/* Patrimônio Total */}
-            <div style={{background:"rgba(34,197,94,0.06)",border:"0.5px solid rgba(34,197,94,0.18)",borderRadius:10,padding:"10px 12px",...noEdit}}>
-              <div style={{fontSize:8,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Patrimônio Total</div>
-              <div style={{fontSize:13,fontWeight:400,color:"#22c55e",lineHeight:1.3,wordBreak:"break-all"}}>
+            <div style={{position:"relative",background:"linear-gradient(135deg,rgba(34,197,94,0.09),rgba(34,197,94,0.02))",border:"0.5px solid rgba(34,197,94,0.22)",borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
+              <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:"radial-gradient(circle,rgba(34,197,94,0.12) 0%,transparent 70%)",pointerEvents:"none"}}/>
+              <div style={{position:"relative",fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Patrimônio Total</div>
+              <div style={{position:"relative",fontSize:18,fontWeight:500,color:"#22c55e",lineHeight:1.2,letterSpacing:"-0.01em",wordBreak:"break-word"}}>
                 {patrimonioDisplay>0?moedaFull(patrimonioDisplay):"—"}
               </div>
               {totalCarteira>0&&totalImoveis+totalVeiculos>0&&(
-                <div style={{fontSize:8,color:"#4ade80",marginTop:2,opacity:0.65}}>inclui imóveis e veículos</div>
+                <div style={{position:"relative",fontSize:12,color:"#4ade80",marginTop:6,opacity:0.92,letterSpacing:"0.01em",fontWeight:500}}>inclui imóveis e veículos</div>
               )}
             </div>
             {/* Patrimônio Financeiro */}
-            <div style={{background:"rgba(240,162,2,0.06)",border:"0.5px solid rgba(240,162,2,0.18)",borderRadius:10,padding:"10px 12px",...noEdit}}>
-              <div style={{fontSize:8,color:"#fcd34d",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Patrimônio Financeiro</div>
-              <div style={{fontSize:13,fontWeight:400,color:"#F0A202",lineHeight:1.3,wordBreak:"break-all"}}>
+            <div style={{position:"relative",background:"linear-gradient(135deg,rgba(240,162,2,0.09),rgba(240,162,2,0.02))",border:"0.5px solid rgba(240,162,2,0.22)",borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
+              <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:"radial-gradient(circle,rgba(240,162,2,0.14) 0%,transparent 70%)",pointerEvents:"none"}}/>
+              <div style={{position:"relative",fontSize:9,color:"#fcd34d",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Patrimônio Financeiro</div>
+              <div style={{position:"relative",fontSize:18,fontWeight:500,color:"#F0A202",lineHeight:1.2,letterSpacing:"-0.01em",wordBreak:"break-word"}}>
                 {patrimonioFinanceiro>0?moedaFull(patrimonioFinanceiro):"—"}
               </div>
               {patrimonioFinanceiro>0&&(
-                <div style={{fontSize:8,color:"#fbbf24",marginTop:2,opacity:0.65}}>somente investimentos</div>
+                <div style={{position:"relative",fontSize:12,color:"#fbbf24",marginTop:6,opacity:0.92,letterSpacing:"0.01em",fontWeight:500}}>somente investimentos</div>
               )}
             </div>
             {/* Renda Mensal */}
-            <div style={{background:"rgba(96,165,250,0.06)",border:"0.5px solid rgba(96,165,250,0.18)",borderRadius:10,padding:"10px 12px",...noEdit}}>
-              <div style={{fontSize:8,color:"#93c5fd",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Renda Mensal</div>
-              <div style={{fontSize:13,fontWeight:400,color:"#60a5fa",lineHeight:1.3,wordBreak:"break-all"}}>
+            <div style={{position:"relative",background:"linear-gradient(135deg,rgba(96,165,250,0.09),rgba(96,165,250,0.02))",border:"0.5px solid rgba(96,165,250,0.22)",borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
+              <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:"radial-gradient(circle,rgba(96,165,250,0.12) 0%,transparent 70%)",pointerEvents:"none"}}/>
+              <div style={{position:"relative",fontSize:9,color:"#93c5fd",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Renda Mensal</div>
+              <div style={{position:"relative",fontSize:18,fontWeight:500,color:"#60a5fa",lineHeight:1.2,letterSpacing:"-0.01em",wordBreak:"break-word"}}>
                 {rendaMensal>0?moedaFull(rendaMensal):"—"}
               </div>
               {gastosMensaisEfetivo>0&&rendaMensal>0&&(
-                <div style={{fontSize:8,color:"#93c5fd",marginTop:2,opacity:0.65}}>gastos: {formatMi(gastosMensaisEfetivo)}/mês</div>
+                <div style={{position:"relative",fontSize:12,color:"#93c5fd",marginTop:6,opacity:0.92,letterSpacing:"0.01em",fontWeight:500}}>gastos: {moedaFull(gastosMensaisEfetivo)}/mês</div>
               )}
             </div>
             {/* Reserva de Emergência com status */}
-            <div style={{background:reservaStatus.bg,border:reservaStatus.border,borderRadius:10,padding:"10px 12px",...noEdit}}>
-              <div style={{fontSize:8,color:reservaStatus.labelCor,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4,fontWeight:500}}>Reserva Emergência</div>
-              <div style={{fontSize:11,fontWeight:600,color:reservaStatus.cor,lineHeight:1.3,marginBottom:2}}>
+            <div style={{position:"relative",background:reservaStatus.bg,border:reservaStatus.border,borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
+              <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:`radial-gradient(circle,${reservaStatus.cor}1f 0%,transparent 70%)`,pointerEvents:"none"}}/>
+              <div style={{position:"relative",fontSize:9,color:reservaStatus.labelCor,textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Reserva Emergência</div>
+              <div style={{position:"relative",fontSize:15,fontWeight:600,color:reservaStatus.cor,lineHeight:1.2,marginBottom:4,letterSpacing:"-0.01em"}}>
                 {reservaStatus.label}
               </div>
               {reservaMeta>0&&(
-                <div style={{fontSize:8,color:reservaStatus.cor,opacity:0.7}}>meta: {formatMi(reservaMeta)}</div>
+                <div style={{position:"relative",fontSize:12,color:reservaStatus.cor,opacity:0.92,letterSpacing:"0.01em",fontWeight:500}}>meta: {moedaFull(reservaMeta)}</div>
               )}
               {reservaMeta>0&&liquidezReserva>0&&liquidezReserva<reservaMeta&&(
-                <div style={{marginTop:5,height:2,background:"rgba(255,255,255,0.07)",borderRadius:2,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${Math.min(liquidezReserva/reservaMeta*100,100).toFixed(0)}%`,background:reservaStatus.cor,borderRadius:2}}/>
+                <div style={{position:"relative",marginTop:7,height:3,background:"rgba(255,255,255,0.08)",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.min(liquidezReserva/reservaMeta*100,100).toFixed(0)}%`,background:`linear-gradient(90deg,${reservaStatus.cor},${reservaStatus.cor}cc)`,borderRadius:3,boxShadow:`0 0 8px ${reservaStatus.cor}80`}}/>
                 </div>
               )}
             </div>

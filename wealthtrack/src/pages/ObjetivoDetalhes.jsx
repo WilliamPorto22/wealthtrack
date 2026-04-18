@@ -98,24 +98,37 @@ export default function ObjetivoDetalhes() {
   const [selecaoAtivos, setSelecaoAtivos] = useState(new Set());
   const [salvandoAtivos, setSalvandoAtivos] = useState(false);
 
-  useEffect(() => {
-    async function carregar() {
-      try {
-        const snap = await getDoc(doc(db, "clientes", clienteId));
-        if (snap.exists()) {
-          const dados = snap.data();
-          setCliente(dados);
-          const obj = dados.objetivos?.[parseInt(objetivoIndex)];
-          if (obj) setObjetivo(obj);
-        }
-      } catch (erro) {
-        console.error("Erro ao carregar dados:", erro);
-      } finally {
-        setLoading(false);
+  async function carregarCliente() {
+    try {
+      const snap = await getDoc(doc(db, "clientes", clienteId));
+      if (snap.exists()) {
+        const dados = snap.data();
+        setCliente(dados);
+        const obj = dados.objetivos?.[parseInt(objetivoIndex)];
+        if (obj) setObjetivo(obj);
       }
+    } catch (erro) {
+      console.error("Erro ao carregar dados:", erro);
+    } finally {
+      setLoading(false);
     }
-    carregar();
+  }
+
+  useEffect(() => {
+    carregarCliente();
   }, [clienteId, objetivoIndex]);
+
+  // Re-busca carteira quando a aba volta ao foco (usuário retorna de Carteira)
+  useEffect(() => {
+    function onFocus() { carregarCliente(); }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [clienteId, objetivoIndex]);
+
+  // Re-busca ao trocar para a aba Ativos (para capturar alterações feitas em Carteira)
+  useEffect(() => {
+    if (abaAtiva === "ativos") carregarCliente();
+  }, [abaAtiva]);
 
   useEffect(() => {
     async function obterDados() {
@@ -1443,18 +1456,26 @@ export default function ObjetivoDetalhes() {
     if (vinculados.length === 0) {
       return (
         <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
             <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
               Ativos Vinculados a Este Objetivo
             </div>
-            {todosAtivos.length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
-                onClick={abrirModal}
-                style={{ padding: "8px 14px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusSm, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+                onClick={() => navigate(`/cliente/${clienteId}/carteira`)}
+                style={{ padding: "8px 14px", background: "rgba(255,255,255,0.04)", border: `0.5px solid ${T.border}`, borderRadius: T.radiusSm, color: T.textSecondary, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
               >
-                + Vincular ativos
+                Ir para Carteira →
               </button>
-            )}
+              {todosAtivos.length > 0 && (
+                <button
+                  onClick={abrirModal}
+                  style={{ padding: "8px 14px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusSm, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+                >
+                  + Vincular ativos
+                </button>
+              )}
+            </div>
           </div>
           <div style={{
             background: "rgba(255,255,255,0.02)",
@@ -1467,20 +1488,28 @@ export default function ObjetivoDetalhes() {
             <div style={{ fontSize: 14, color: T.textPrimary, marginBottom: 8, fontWeight: 500 }}>
               Nenhum ativo vinculado ainda
             </div>
-            <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.8, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.8, marginBottom: 18 }}>
               {todosAtivos.length === 0
                 ? <>Cadastre seus investimentos em <strong style={{ color: T.gold }}>Carteira</strong> e marque-os com o objetivo <strong>"{labelAtivo}"</strong> para visualizar o desempenho real aqui.</>
-                : <>Você tem <strong style={{ color: T.textPrimary }}>{todosAtivos.length}</strong> ativo{todosAtivos.length > 1 ? "s" : ""} na carteira. Clique em "+ Vincular ativos" para selecionar quais pertencem a este objetivo.</>
+                : <>Você tem <strong style={{ color: T.textPrimary }}>{todosAtivos.length}</strong> ativo{todosAtivos.length > 1 ? "s" : ""} na carteira. Marque-os com o objetivo <strong>"{labelAtivo}"</strong> em <strong style={{ color: T.gold }}>Carteira</strong>, ou vincule aqui diretamente.</>
               }
             </div>
-            {todosAtivos.length > 0 && (
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
               <button
-                onClick={abrirModal}
-                style={{ padding: "10px 18px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusMd, color: T.gold, fontSize: 12, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.08em" }}
+                onClick={() => navigate(`/cliente/${clienteId}/carteira`)}
+                style={{ padding: "10px 18px", background: "rgba(255,255,255,0.04)", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, color: T.textPrimary, fontSize: 12, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.08em" }}
               >
-                Vincular ativos da carteira
+                Ir para Carteira →
               </button>
-            )}
+              {todosAtivos.length > 0 && (
+                <button
+                  onClick={abrirModal}
+                  style={{ padding: "10px 18px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusMd, color: T.gold, fontSize: 12, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.08em" }}
+                >
+                  Vincular ativos da carteira
+                </button>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -1488,16 +1517,24 @@ export default function ObjetivoDetalhes() {
 
     return (
       <div style={{ animation: "objFadeIn 0.32s ease forwards" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
           <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 500, letterSpacing: "0.14em", textTransform: "uppercase" }}>
             Ativos Vinculados a Este Objetivo
           </div>
-          <button
-            onClick={abrirModal}
-            style={{ padding: "8px 14px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusSm, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
-          >
-            Gerenciar vínculos
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => navigate(`/cliente/${clienteId}/carteira`)}
+              style={{ padding: "8px 14px", background: "rgba(255,255,255,0.04)", border: `0.5px solid ${T.border}`, borderRadius: T.radiusSm, color: T.textSecondary, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+            >
+              Ir para Carteira →
+            </button>
+            <button
+              onClick={abrirModal}
+              style={{ padding: "8px 14px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusSm, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+            >
+              Gerenciar vínculos
+            </button>
+          </div>
         </div>
 
         {/* KPIs */}
@@ -1632,7 +1669,7 @@ export default function ObjetivoDetalhes() {
           color: T.textMuted,
           lineHeight: 1.7,
         }}>
-          Médias ponderadas pelo valor de cada ativo. Os percentuais de rentabilidade refletem o que você cadastrou na <strong style={{ color: T.textSecondary }}>Carteira</strong> — atualize lá para manter os dados em dia.
+          Médias ponderadas pelo valor de cada ativo. Os percentuais de rentabilidade refletem o que você cadastrou na <strong style={{ color: T.textSecondary }}>Carteira</strong> — <span onClick={() => navigate(`/cliente/${clienteId}/carteira`)} style={{ color: T.gold, cursor: "pointer", textDecoration: "underline" }}>abrir carteira</span> para atualizar. Marcar um ativo com o objetivo <strong>"{labelAtivo}"</strong> o vincula automaticamente aqui.
         </div>
       </div>
     );
@@ -1827,6 +1864,7 @@ export default function ObjetivoDetalhes() {
           {abaAtiva === "ativos" && <Ativos />}
         </div>
       </div>
+      <ModalVincularAtivos />
     </div>
   );
 }

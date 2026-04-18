@@ -434,7 +434,7 @@ export default function Carteira(){
 
       <div className="carteira-content">
         {/* Voltar */}
-        <button onClick={()=>navigate(`/cliente/${id}`)}
+        <button onClick={()=>{ if(window.history.length>1) navigate(-1); else navigate(`/cliente/${id}`); }}
           style={{position:"fixed",left:16,top:"50%",transform:"translateY(-50%)",width:44,height:44,borderRadius:22,background:"rgba(240,162,2,0.15)",border:"1px solid rgba(240,162,2,0.3)",color:"#F0A202",fontSize:20,cursor:"pointer",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:font}}
           onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-50%) scale(1.15)";e.currentTarget.style.background="rgba(240,162,2,0.25)";}}
           onMouseLeave={e=>{e.currentTarget.style.transform="translateY(-50%) scale(1)";e.currentTarget.style.background="rgba(240,162,2,0.15)";}}

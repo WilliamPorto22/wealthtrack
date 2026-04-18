@@ -121,7 +121,7 @@ const emojisPorTipo = {
 };
 
 // ── Componente: Seletor de ativos para vincular ao objetivo ──
-function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, totalCalculado }) {
+function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, totalCalculado, onIrCarteira }) {
   const todos = listarAtivosCarteira(carteira);
   const label = TIPO_OBJETIVO_PARA_LABEL[tipoObjetivo];
 
@@ -137,10 +137,18 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
         <div style={{ fontSize: 12, color: T.gold, marginBottom: 6, fontWeight: 500 }}>
           Nenhum ativo cadastrado na carteira
         </div>
-        <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.7 }}>
+        <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.7, marginBottom: 12 }}>
           Cadastre seus investimentos em "Carteira" para poder vincular ativos específicos a este objetivo.
           Ou use o modo "Valor manual" acima.
         </div>
+        {onIrCarteira && (
+          <button
+            onClick={onIrCarteira}
+            style={{ padding: "9px 16px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusSm, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+          >
+            Ir para Carteira →
+          </button>
+        )}
       </div>
     );
   }
@@ -250,8 +258,16 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
         </>
       )}
 
-      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 12, lineHeight: 1.6 }}>
-        Os ativos selecionados serão marcados na sua carteira com o objetivo "{label}" e contabilizados como patrimônio deste plano.
+      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 12, lineHeight: 1.6, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <span>Os ativos selecionados serão marcados na sua carteira com o objetivo "{label}" e contabilizados como patrimônio deste plano.</span>
+        {onIrCarteira && (
+          <button
+            onClick={onIrCarteira}
+            style={{ padding: "7px 12px", background: "rgba(255,255,255,0.04)", border: `0.5px solid ${T.border}`, borderRadius: T.radiusSm, color: T.textSecondary, fontSize: 10, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em", whiteSpace: "nowrap" }}
+          >
+            Abrir Carteira →
+          </button>
+        )}
       </div>
     </div>
   );
@@ -274,16 +290,23 @@ export default function Objetivos() {
   // ativos selecionados para este objetivo: Set de "classeKey::ativoId"
   const [ativosSelecionados, setAtivosSelecionados] = useState(new Set());
 
-  useEffect(() => {
-    async function carregar() {
-      const snap = await getDoc(doc(db, "clientes", id));
-      if (snap.exists()) {
-        const data = snap.data();
-        setObjetivos(data.objetivos || []);
-        setCarteira(data.carteira || {});
-      }
+  async function carregarCliente() {
+    const snap = await getDoc(doc(db, "clientes", id));
+    if (snap.exists()) {
+      const data = snap.data();
+      setObjetivos(data.objetivos || []);
+      setCarteira(data.carteira || {});
     }
-    carregar();
+  }
+
+  useEffect(() => {
+    carregarCliente();
+  }, [id]);
+
+  useEffect(() => {
+    function onFocus() { carregarCliente(); }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [id]);
 
   // Sempre que o tipo do objetivo mudar, pré-seleciona ativos já marcados
@@ -853,6 +876,7 @@ export default function Objetivos() {
                 selecionados={ativosSelecionados}
                 setSelecionados={setAtivosSelecionados}
                 totalCalculado={inicial}
+                onIrCarteira={() => navigate(`/cliente/${id}/carteira`)}
               />
             )}
 
