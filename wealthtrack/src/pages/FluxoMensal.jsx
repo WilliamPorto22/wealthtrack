@@ -71,6 +71,9 @@ const CATS = [
 ];
 
 // ── Gráfico donut SVG ──────────────────────────────────────────
+// Radius math: o traço do circle estende pra fora do raio (strokeWidth/2 extra).
+// Se Ro + strokeWidth/2 > size/2, as bordas são cortadas pelo SVG.
+// Corrigido: calcula Ro a partir do raio máximo visível menos metade do traço.
 function DonutGastos({ cats, form, total, size=200 }) {
   const active = cats.filter(c=>parseCentavos(form[c.key])>0);
   if (!active.length || total<=0) return (
@@ -81,31 +84,71 @@ function DonutGastos({ cats, form, total, size=200 }) {
       </div>
     </div>
   );
-  const cx=size/2, cy=size/2, Ro=size*0.44, Ri=size*0.30;
-  const C2=2*Math.PI*Ro;
-  const gap=active.length>1?2:0;
-  let angle=-90;
-  const segs=active.map(c=>{
-    const v=parseCentavos(form[c.key])/100;
-    const pct=v/total;
-    const sweep=pct*360;
-    const dashLen=Math.max((sweep-gap)/360*C2,0.5);
-    const rot=angle; angle+=sweep;
+  const pad = 6;
+  const cx = size/2, cy = size/2;
+  const outerEdge = size/2 - pad;
+  const strokeWidth = Math.max(size * 0.14, 14);
+  const Ro = outerEdge - strokeWidth/2;
+  const C2 = 2*Math.PI*Ro;
+  const gap = active.length>1 ? 2 : 0;
+  let angle = -90;
+  const segs = active.map(c=>{
+    const v = parseCentavos(form[c.key])/100;
+    const pct = v/total;
+    const sweep = pct*360;
+    const dashLen = Math.max((sweep-gap)/360*C2, 0.5);
+    const rot = angle; angle += sweep;
     return {...c,v,dashLen,rot,pct};
   });
+  const largest = segs.reduce((a,b)=>b.pct>a.pct?b:a, segs[0]);
   return (
-    <svg width={size} height={size} style={noEdit}>
-      <circle cx={cx} cy={cy} r={Ro} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={Ro-Ri}/>
-      {segs.map((s,i)=>(
-        <circle key={i} cx={cx} cy={cy} r={Ro} fill="none"
-          stroke={s.cor} strokeWidth={Ro-Ri}
-          strokeDasharray={`${s.dashLen} ${C2}`}
-          strokeLinecap="butt"
-          transform={`rotate(${s.rot},${cx},${cy})`} opacity={0.9}/>
-      ))}
-      <text x={cx} y={cy-10} textAnchor="middle" fontSize={10} fill={T.textMuted} fontFamily={font}>GASTOS</text>
-      <text x={cx} y={cy+8} textAnchor="middle" fontSize={13} fill={T.textPrimary} fontFamily={font} fontWeight="300">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{...noEdit,overflow:"visible",display:"block"}}>
+      <defs>
+        {segs.map((s,i)=>(
+          <linearGradient key={i} id={`donutGrad-${i}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"  stopColor={s.cor} stopOpacity={0.95}/>
+            <stop offset="100%" stopColor={s.cor} stopOpacity={0.72}/>
+          </linearGradient>
+        ))}
+        <filter id="donutShadow" x="-25%" y="-25%" width="150%" height="150%">
+          <feGaussianBlur in="SourceAlpha" stdDeviation="2.5"/>
+          <feOffset dx="0" dy="1" result="off"/>
+          <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+          <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      {/* Trilho de fundo */}
+      <circle cx={cx} cy={cy} r={Ro} fill="none"
+        stroke="rgba(255,255,255,0.045)" strokeWidth={strokeWidth}/>
+
+      {/* Segmentos coloridos */}
+      <g filter="url(#donutShadow)">
+        {segs.map((s,i)=>(
+          <circle key={i} cx={cx} cy={cy} r={Ro} fill="none"
+            stroke={`url(#donutGrad-${i})`} strokeWidth={strokeWidth}
+            strokeDasharray={`${s.dashLen} ${C2}`}
+            strokeLinecap="butt"
+            transform={`rotate(${s.rot},${cx},${cy})`}/>
+        ))}
+      </g>
+
+      {/* Brilho sutil na borda interna */}
+      <circle cx={cx} cy={cy} r={Ro - strokeWidth/2 + 0.5} fill="none"
+        stroke="rgba(255,255,255,0.05)" strokeWidth={1}/>
+
+      {/* Textos centrais */}
+      <text x={cx} y={cy-12} textAnchor="middle" fontSize={8.5} fill={T.textMuted}
+        fontFamily={font} letterSpacing="0.2em" fontWeight={500} style={noEdit}>
+        GASTOS
+      </text>
+      <text x={cx} y={cy+6} textAnchor="middle" fontSize={15} fill={T.textPrimary}
+        fontFamily={font} fontWeight={400} style={noEdit}>
         {fmtMi(total)}
+      </text>
+      <text x={cx} y={cy+20} textAnchor="middle" fontSize={8} fill={largest?.cor||T.textMuted}
+        fontFamily={font} letterSpacing="0.06em" style={noEdit} opacity={0.85}>
+        {active.length} categoria{active.length>1?"s":""}
       </text>
     </svg>
   );
@@ -202,7 +245,7 @@ export default function FluxoMensal() {
     try{
       const text=await extractText(file,(pct,message)=>setP(pct,message));
       const dados=parseFluxoFromText(text);
-      const catKeys=Object.keys(dados).filter(k=>!k.endsWith("_items"));
+      const catKeys=Object.keys(dados).filter(k=>!k.endsWith("_items")&&!k.startsWith("_"));
       if(catKeys.length===0){
         setP(100,"Nenhum dado reconhecido. Verifique o arquivo ou preencha manualmente.",{error:true,errorDetail:"O arquivo não contém dados financeiros legíveis no formato esperado. Tente outro arquivo ou preencha manualmente os campos abaixo."});
         setModo("editar");
@@ -211,10 +254,20 @@ export default function FluxoMensal() {
         Object.entries(dados).forEach(([k,v])=>{ novoForm[k]=v; });
         setForm(novoForm);
         const temItems=Object.keys(dados).some(k=>k.endsWith("_items"));
-        const msg=temItems
-          ?`✓ ${catKeys.length} categori${catKeys.length>1?"as":"a"} com transações individuais importadas. Revise e salve.`
-          :`✓ ${catKeys.length} campo${catKeys.length>1?"s":""} preenchido${catKeys.length>1?"s":""}. Revise e salve.`;
-        setP(100,msg);
+        const nTrans=parseInt(dados._transacoesExtraidas||"0");
+        const faturaTotal=parseCentavos(dados._faturaTotal||"0");
+        const somaCats=catKeys.reduce((s,k)=>s+parseCentavos(dados[k]||"0"),0);
+        const validacao=faturaTotal>0
+          ?`Total da fatura: R$ ${(faturaTotal/100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} · Soma extraída: R$ ${(somaCats/100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}`
+          :"";
+        const msgBase=temItems
+          ?`✓ ${nTrans||"—"} transação${nTrans===1?"":"ões"} em ${catKeys.length} categoria${catKeys.length>1?"s":""}.`
+          :`✓ ${catKeys.length} campo${catKeys.length>1?"s":""} preenchido${catKeys.length>1?"s":""}.`;
+        if(dados._warning){
+          setP(100,msgBase+" Revise os valores.",{error:true,errorDetail:dados._warning+(validacao?"\n"+validacao:"")});
+        } else {
+          setP(100,validacao?`${msgBase} ${validacao}. Revise e salve.`:`${msgBase} Revise e salve.`);
+        }
         setModo("ver");
       }
     } catch(err){
@@ -268,7 +321,7 @@ export default function FluxoMensal() {
         </div>
 
         {/* KPIs topo */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:18}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:10,marginBottom:18}}>
           {[
             {l:"Renda Mensal",v:fmtFull(rendaEfetiva),cor:"#22c55e",bd:"rgba(34,197,94,0.28)",sub:rendaFluxo>0?"declarado aqui":rendaExterna>0?"do cadastro":"—"},
             {l:"Total de Gastos",v:fmtFull(totalGastos),cor:"#ef4444",bd:"rgba(239,68,68,0.28)",sub:totalGastos>0?`${CATS.filter(c=>parseCentavos(form[c.key])>0).length} categorias`:"sem dados"},
@@ -293,7 +346,7 @@ export default function FluxoMensal() {
         {modo==="editar"&&(
           <div style={{background:T.bgCard,border:`0.5px solid rgba(34,197,94,0.22)`,borderRadius:T.radiusLg,padding:"16px 18px",marginBottom:14,boxShadow:T.shadowSm}}>
             <div style={{fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:12,...noEdit}}>Renda Mensal</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10}}>
               <div>
                 <Lbl>Renda / Salário mensal</Lbl>
                 <InputMoeda initValue={form.renda} onCommit={(v)=>setF("renda",v)} placeholder="R$ 0,00"/>

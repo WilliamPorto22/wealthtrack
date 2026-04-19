@@ -535,7 +535,7 @@ export default function ObjetivoDetalhes() {
         {/* KPI mini cards */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
           gap: 10,
           marginBottom: 20,
         }}>
@@ -594,7 +594,7 @@ export default function ObjetivoDetalhes() {
           padding: "16px 18px",
           marginBottom: 20,
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))",
           gap: 16,
         }}>
           <div>
@@ -662,7 +662,7 @@ export default function ObjetivoDetalhes() {
         </div>
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))",
           gap: 10,
           marginBottom: 28,
         }}>
@@ -1057,7 +1057,7 @@ export default function ObjetivoDetalhes() {
           padding: "16px 20px",
           marginBottom: 28,
           display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
           gap: 12,
           textAlign: "center"
         }}>
@@ -1538,7 +1538,7 @@ export default function ObjetivoDetalhes() {
         </div>
 
         {/* KPIs */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 20 }}>
           {[
             { label: "Total Vinculado", valor: brl(totalVinculado), color: corTipo },
             { label: "Ativos", valor: `${vinculados.length}`, color: T.textPrimary },

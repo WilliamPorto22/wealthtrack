@@ -571,48 +571,195 @@ function mapCategory(nearbyText, merchantName) {
 }
 
 // ── Parser genérico de fatura / extrato ───────────────────────
+// Estratégia robusta:
+//   1. Extrai o TOTAL DA FATURA declarado (para validação)
+//   2. Detecta seções para evitar duplicação (compras nacionais vs internacionais,
+//      saldo anterior, pagamentos recebidos, resumo vs lançamentos detalhados)
+//   3. Parseia transações, trata estornos (CR) como negativos
+//   4. Deduplica (mesma data+descrição+valor aparecem no resumo E no detalhe)
+//   5. Valida a soma contra o total declarado e ajusta se divergente
 
 function parseFatura(text) {
   const lines = text.split("\n");
   const result = {};
 
-  const TRANS_RE = /^(\d{2}\/\d{2}(?:\/\d{2,4})?)\s+(.+?)\s+([\d.]+,\d{2})(?:\s+CR)?$/;
-  const SKIP_RE = /^(?:TOTAL|SUBTOTAL|VENCIMENTO|DATA\b|VALOR\b|SALDO|LIMITE|FATURA\b|PAGAMENTO\b|CAMBIO|IOF|ENCARGOS|JUROS\b|MULTA|TARIFA|ANUIDADE|\*{3}|\-{3}|={3})/i;
+  // 1. ── EXTRAÇÃO DO TOTAL DECLARADO DA FATURA ─────────────────
+  // Procura múltiplos formatos usados por diferentes bancos/operadoras
+  const totalPatterns = [
+    /TOTAL\s+DESTA\s+FATURA\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /TOTAL\s+DA\s+FATURA\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /VALOR\s+DESTA\s+FATURA\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /VALOR\s+(?:DA\s+)?FATURA\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /TOTAL\s+A\s+PAGAR\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /VALOR\s+A\s+PAGAR\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /NOVO\s+SALDO\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+    /SALDO\s+ATUAL\s*:?\s*R?\$?\s*([\d.]+,\d{2})/i,
+  ];
+  let faturaTotal = 0;
+  const nt = norm(text);
+  for (const re of totalPatterns) {
+    const m = nt.match(re);
+    if (m) { faturaTotal = parseBRL(m[1]); break; }
+  }
+
+  // 2. ── REGEX DE TRANSAÇÃO E FILTROS ──────────────────────────
+  const TRANS_RE = /^(\d{2}\/\d{2}(?:\/\d{2,4})?)\s+(.+?)\s+([\d.]+,\d{2})(?:\s+(CR|C|D))?$/;
+  // Linhas de resumo/header — nunca são transações reais
+  const SKIP_RE = /^(?:TOTAL|SUBTOTAL|VENCIMENTO|DATA\b|VALOR\b|SALDO|LIMITE|FATURA\b|PAGAMENTO\b|PAGAMENTOS\b|CAMBIO|C.MBIO|MULTA|TARIFA|ANUIDADE|\*{3}|-{3}|={3})/i;
+
+  // Seções que DEVEM ser puladas para evitar soma errada:
+  //   - Saldo anterior / fatura anterior (já pago, não é gasto novo)
+  //   - Pagamentos recebidos (crédito, não gasto)
+  //   - Compras internacionais em US$ (valor em dólar é mostrado junto com
+  //     o convertido em R$; contar ambos duplica)
+  //   - Resumo da fatura no início (as transações aparecem novamente no detalhe)
+  const SECTION_SKIP_START = [
+    /SALDO\s+ANTERIOR/i,
+    /FATURA\s+ANTERIOR/i,
+    /PAGAMENTO(?:S)?\s+(?:RECEBIDO|EFETUADO)/i,
+    /CR.DITOS?\s+E\s+PAGAMENTOS?/i,
+    /COMPRAS?\s+INTERNACIONAIS/i,
+    /LAN.AMENTOS?\s+INTERNACIONAIS/i,
+    /COMPRAS?\s+EM\s+US\$|EM\s+D.LAR/i,
+    /RESUMO\s+(?:DA\s+)?FATURA/i,
+    /RESUMO\s+DOS?\s+LAN.AMENTOS?/i,
+    /TOTAIS\s+POR\s+CATEGORIA/i,
+  ];
+  const SECTION_SKIP_END = [
+    /COMPRAS?\s+(?:NACIONAIS|DO\s+M.S|DO\s+PER.ODO)/i,
+    /LAN.AMENTOS?\s+(?:NACIONAIS|DO\s+M.S|DO\s+PER.ODO|DETALHAD)/i,
+    /GASTOS?\s+(?:DO\s+M.S|DO\s+PER.ODO)/i,
+    /DETALHAMENTO/i,
+  ];
+
+  // 3. ── COLETA DE TRANSAÇÕES COM SECTION AWARENESS ────────────
+  let skippingSection = false;
+  const allTrans = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    if (!line || SKIP_RE.test(line)) continue;
+    if (!line) continue;
+
+    const normLine = norm(line);
+
+    // Detecta início de seção para pular
+    for (const re of SECTION_SKIP_START) {
+      if (re.test(normLine)) { skippingSection = true; break; }
+    }
+    // Detecta fim de seção (entrando em área de compras normais)
+    for (const re of SECTION_SKIP_END) {
+      if (re.test(normLine)) { skippingSection = false; break; }
+    }
+
+    if (SKIP_RE.test(line)) continue;
+    if (skippingSection) continue;
 
     const m = TRANS_RE.exec(line);
     if (!m) continue;
 
-    const data  = m[1].slice(0, 5);
-    const nome  = m[2].trim();
+    const data = m[1].slice(0, 5);
+    const nome = m[2].trim();
     const valor = parseBRL(m[3]);
+    const suffix = (m[4] || "").toUpperCase();
+    // CR = crédito/estorno. Também detecta palavras no nome
+    const isCredit = suffix === "CR" || suffix === "C" ||
+      /\b(ESTORNO|DEVOLU.{0,4}O|REEMBOLSO|CR.DITO|CANCELAMENTO)\b/i.test(norm(nome));
 
     if (valor <= 0 || valor > 20000000) continue;
+    if (nome.length < 3) continue;
+    // Filtra linhas que começam com código/ID puramente numérico
+    if (/^\d{6,}$/.test(nome)) continue;
 
+    allTrans.push({ data, nome, valor, isCredit, lineIdx: i });
+  }
+
+  // 4. ── DEDUPLICAÇÃO ─────────────────────────────────────────
+  // Mesma data + valor + primeiras palavras do nome = mesma transação
+  // (acontece quando o PDF lista resumo + detalhe, ou repete em páginas)
+  const seen = new Map();
+  const uniqTrans = [];
+  for (const t of allTrans) {
+    const nomeKey = norm(t.nome).replace(/\s+/g, " ").slice(0, 22);
+    const key = `${t.data}|${nomeKey}|${t.valor}`;
+    if (seen.has(key)) continue;
+    seen.set(key, true);
+    uniqTrans.push(t);
+  }
+
+  // 5. ── VALIDAÇÃO CONTRA TOTAL DA FATURA ─────────────────────
+  const somaBruta = uniqTrans.reduce((s, t) => s + (t.isCredit ? -t.valor : t.valor), 0);
+  let warning = null;
+  let transacoes = uniqTrans;
+
+  if (faturaTotal > 0 && somaBruta > 0) {
+    const ratio = somaBruta / faturaTotal;
+    console.log(`[WealthTrack] Fatura declarada: R$ ${(faturaTotal/100).toFixed(2)} | Soma extraída: R$ ${(somaBruta/100).toFixed(2)} | ratio: ${ratio.toFixed(2)}`);
+
+    if (ratio > 1.4) {
+      // Soma muito maior que o total → ainda há duplicação. Dedup mais agressivo:
+      // considerar só data+valor (ignora variações no nome)
+      const seen2 = new Map();
+      const ded2 = [];
+      for (const t of uniqTrans) {
+        const key = `${t.data}|${t.valor}`;
+        if (seen2.has(key)) continue;
+        seen2.set(key, true);
+        ded2.push(t);
+      }
+      const soma2 = ded2.reduce((s, t) => s + (t.isCredit ? -t.valor : t.valor), 0);
+      if (soma2 <= faturaTotal * 1.2 && soma2 >= faturaTotal * 0.7) {
+        transacoes = ded2;
+        console.log(`[WealthTrack] Dedup agressivo: R$ ${(soma2/100).toFixed(2)}`);
+      } else {
+        warning = `Soma das transações (R$ ${(somaBruta/100).toFixed(2)}) maior que o total da fatura (R$ ${(faturaTotal/100).toFixed(2)}). Revise os lançamentos.`;
+      }
+    } else if (ratio < 0.6) {
+      warning = `Soma das transações (R$ ${(somaBruta/100).toFixed(2)}) menor que o total da fatura (R$ ${(faturaTotal/100).toFixed(2)}). Algumas transações podem não ter sido lidas.`;
+    }
+  }
+
+  // 6. ── CATEGORIZAÇÃO ─────────────────────────────────────────
+  for (const t of transacoes) {
     let contexto = "";
-    for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
+    for (let j = t.lineIdx + 1; j <= Math.min(t.lineIdx + 2, lines.length - 1); j++) {
       const nl = lines[j].trim();
       if (!nl || TRANS_RE.test(nl)) break;
       contexto += " " + nl;
     }
 
-    const catKey = mapCategory(contexto, nome);
+    const catKey = mapCategory(contexto, t.nome);
+    const signedValor = t.isCredit ? -t.valor : t.valor;
 
     if (!result[catKey]) result[catKey] = 0;
-    result[catKey] += valor;
+    result[catKey] += signedValor;
+    if (result[catKey] < 0) result[catKey] = 0;
 
     const itemsKey = catKey + "_items";
     if (!result[itemsKey]) result[itemsKey] = [];
-    result[itemsKey].push({ nome, valor, data });
+    result[itemsKey].push({
+      nome: t.nome,
+      valor: t.valor,
+      data: t.data,
+      ...(t.isCredit ? { credito: true } : {}),
+    });
   }
 
   const output = {};
   for (const [key, val] of Object.entries(result)) {
     output[key] = key.endsWith("_items") ? val : String(val);
   }
+
+  // Metadados de validação (usados pela UI)
+  if (faturaTotal > 0) output._faturaTotal = String(faturaTotal);
+  if (warning) output._warning = warning;
+  output._transacoesExtraidas = String(transacoes.length);
+
+  console.log("[WealthTrack] parseFatura:", {
+    faturaTotal: faturaTotal/100,
+    transacoes: transacoes.length,
+    somaCategorias: Object.entries(result).filter(([k]) => !k.endsWith("_items")).reduce((s,[,v]) => s+v, 0) / 100,
+  });
+
   return output;
 }
 

@@ -822,7 +822,7 @@ export default function ClienteFicha() {
 
           {/* Botões de ação */}
           {id!=="novo"&&(
-            <div style={{position:"relative",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10,marginBottom:14}}>
               {/* Marcar / editar revisão — 3 estados */}
               {(()=>{
                 const abrirModal = ()=>{
@@ -917,7 +917,7 @@ export default function ClienteFicha() {
           )}
 
           {/* KPI strip — grade 2×2 premium */}
-          <div style={{position:"relative",display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10}}>
             {/* Patrimônio Total */}
             <div style={{position:"relative",background:"linear-gradient(135deg,rgba(34,197,94,0.09),rgba(34,197,94,0.02))",border:"0.5px solid rgba(34,197,94,0.22)",borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
               <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:"radial-gradient(circle,rgba(34,197,94,0.12) 0%,transparent 70%)",pointerEvents:"none"}}/>
@@ -996,7 +996,7 @@ export default function ClienteFicha() {
 
             {/* Dados pessoais */}
             <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>Dados Pessoais</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
               <div style={{gridColumn:"1/-1"}}>
                 <Lbl>Nome completo</Lbl>
                 <InputTexto key={`nome-${id}`} initValue={snap.nome} onCommit={v=>setFSnap("nome",v)} placeholder="Nome do cliente"/>
@@ -1059,7 +1059,7 @@ export default function ClienteFicha() {
 
             {/* Financeiro */}
             <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>Dados Financeiros</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
               <div>
                 <Lbl>Salário / Renda mensal</Lbl>
                 <InputMoeda key={`sal-${id}`} initValue={snap.salarioMensal} onCommit={v=>setFSnap("salarioMensal",v)}/>
@@ -1090,7 +1090,7 @@ export default function ClienteFicha() {
                   <div style={{fontSize:10,color:"#22c55e",textTransform:"uppercase",letterSpacing:"0.1em",...noEdit}}>Imóvel {i+1}</div>
                   <button onClick={()=>removerImovel(i)} style={{padding:"4px 10px",background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Remover</button>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10,marginBottom:10}}>
                   <div>
                     <Lbl>Tipo de imóvel</Lbl>
                     <CustomSelect value={im.tipo} onChange={v=>atualizarImovel(i,"tipo",v)} options={TIPOS_IMOVEL}/>
@@ -1125,7 +1125,7 @@ export default function ClienteFicha() {
                   <div style={{fontSize:10,color:"#60a5fa",textTransform:"uppercase",letterSpacing:"0.1em",...noEdit}}>Veículo {i+1}</div>
                   <button onClick={()=>removerVeiculo(i)} style={{padding:"4px 10px",background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Remover</button>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10,marginBottom:10}}>
                   <div>
                     <Lbl>Tipo de veículo</Lbl>
                     <CustomSelect value={v.tipo} onChange={val=>atualizarVeiculo(i,"tipo",val)} options={TIPOS_VEICULO}/>
@@ -1159,7 +1159,7 @@ export default function ClienteFicha() {
         {modo==="ver"&&id!=="novo"&&(
           <>
             {/* Quick links */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:10,marginBottom:14}}>
               {[["Objetivos","objetivos","🎯"],["Carteira","carteira","📊"],["Gastos Mensais","fluxo","💸"]].map(([l,r,ic])=>(
                 <div key={l}
                   onClick={()=>navigate(`/cliente/${id}/${r}`)}
@@ -1218,7 +1218,7 @@ export default function ClienteFicha() {
                   return (
                     <>
                       {/* ── Linha 1: Barras + Pizza Patrimônio por Categoria ── */}
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12,alignItems:"stretch"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12,alignItems:"stretch"}}>
                         <div style={panelStyle}>
                           <div style={panelTitle}>Distribuição em Reais (R$)</div>
                           <BarChartVertical items={cats}/>
@@ -1238,7 +1238,7 @@ export default function ClienteFicha() {
 
                       {/* ── Linha 2: Pizza Brasil vs Global + Pizza Classes ── */}
                       {totalCarteira>0&&(
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12,alignItems:"stretch"}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12,alignItems:"stretch"}}>
                           {/* Brasil vs Global */}
                           <div style={panelStyle}>
                             <div style={panelTitle}>Brasil vs Global (USD)</div>
@@ -1278,7 +1278,7 @@ export default function ClienteFicha() {
                       {totalCarteira>0&&(
                         <div style={{...panelStyle,marginBottom:12}}>
                           <div style={panelTitle}>Liquidez da Carteira</div>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10}}>
                             <div style={{background:"rgba(34,197,94,0.05)",border:"0.5px solid rgba(34,197,94,0.18)",borderRadius:10,padding:"12px 14px",...noEdit}}>
                               <div style={{fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>D+1 — Resgate Imediato</div>
                               <div style={{fontSize:15,fontWeight:300,color:"#22c55e"}}>
@@ -1478,7 +1478,7 @@ export default function ClienteFicha() {
             >
               <div style={{paddingTop:16}}>
                 {/* Cards Rendas / Despesas */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10,marginBottom:16}}>
                   {/* RENDAS */}
                   <div style={{background:"rgba(34,197,94,0.05)",border:"0.5px solid rgba(34,197,94,0.22)",borderRadius:14,padding:"16px 14px"}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
@@ -1491,7 +1491,7 @@ export default function ClienteFicha() {
                         <span style={{fontSize:11,fontWeight:700,color:"#22c55e",letterSpacing:"0.1em",...noEdit}}>RENDAS</span>
                       </div>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:8}}>
                       <div>
                         <div style={{fontSize:8,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:5,...noEdit}}>Renda Mensal</div>
                         <div style={{fontSize:15,fontWeight:300,color:T.textPrimary,...noEdit}}>{rendaMensal>0?formatMi(rendaMensal):"—"}</div>
@@ -1514,7 +1514,7 @@ export default function ClienteFicha() {
                         <span style={{fontSize:11,fontWeight:700,color:"#ef4444",letterSpacing:"0.1em",...noEdit}}>DESPESAS</span>
                       </div>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:8}}>
                       <div>
                         <div style={{fontSize:8,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:5,...noEdit}}>Desp. Mensal</div>
                         <div style={{fontSize:15,fontWeight:300,color:T.textPrimary,...noEdit}}>{gastosMensaisEfetivo>0?formatMi(gastosMensaisEfetivo):"—"}</div>
@@ -1529,7 +1529,7 @@ export default function ClienteFicha() {
 
                 {/* Sobra e meta */}
                 {rendaMensal>0&&gastosMensaisEfetivo>0&&(
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:8,marginBottom:16}}>
                     {[
                       {l:"Sobra mensal",v:rendaMensal-gastosMensaisEfetivo,cor:"#60a5fa"},
                       {l:"Meta de aporte/mês",v:parseCentavos(snap.metaAporteMensal)/100,cor:"#22c55e"},
@@ -1568,7 +1568,7 @@ export default function ClienteFicha() {
                   const mesAtual=hoje.getMonth();
                   return(
                     <>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:6,marginBottom:16}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(6, minmax(0, 1fr))",gap:6,marginBottom:16}}>
                         {meses.map((mes,i)=>{
                           const mov=hist.find(m=>m.mes===i+1);
                           let bg="rgba(107,127,163,0.12)",cor=T.textMuted,tipo=null;
@@ -1741,7 +1741,7 @@ export default function ClienteFicha() {
                         </div>
 
                         {/* Cards 1 / 3 / 6 meses */}
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:8,marginBottom:12}}>
                           {[1,3,6].map(m=>(
                             <div key={m} style={{background:"rgba(255,255,255,0.025)",borderRadius:10,padding:"12px",textAlign:"center",...noEdit}}>
                               <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>{m} {m===1?"mês":"meses"}</div>
@@ -1773,7 +1773,7 @@ export default function ClienteFicha() {
               isOpen={sections.dados}
               onToggle={()=>toggleSection("dados")}
             >
-              <div style={{paddingTop:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{paddingTop:16,display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12}}>
                 {[
                   {l:"E-mail",v:snap.email},
                   {l:"Telefone",v:snap.telefone},

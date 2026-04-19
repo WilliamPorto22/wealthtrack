@@ -502,7 +502,7 @@ export default function Objetivos() {
               <div style={{ flex:1, height:"0.5px", background:T.border }}/>
             </div>
 
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:16, marginBottom:28, alignItems:"stretch" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:16, marginBottom:28, alignItems:"stretch" }}>
             {objetivos.map((obj, i) => {
               const { anosNec, status, ultimo, inicial, aporte, meta, prazo } = diagnostico(obj);
               const cor = corStatus[status];
@@ -657,7 +657,7 @@ export default function Objetivos() {
           <div style={{ flex:1, height:"0.5px", background:T.border }}/>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))", gap:14 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:14 }}>
           {TIPOS.map(t => {
             const cor = coresPorTipo[t.id] || "#F0A202";
             const [r,g,b] = cor.slice(1).match(/.{2}/g).map(h=>parseInt(h,16));
@@ -923,7 +923,7 @@ export default function Objetivos() {
                   <div style={{ fontSize:9, color:T.textMuted, textTransform:"uppercase", letterSpacing:"0.12em", marginBottom:14 }}>
                     Projeção — {prazo} anos
                   </div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:10 }}>
                     {[
                       ["Patrimônio real acumulado", brl(ultimo?.totalReal||0)],
                       ["Renda mensal real",         `${brl(ultimo?.rendaMensalReal||0)}/mês`],
@@ -965,7 +965,7 @@ export default function Objetivos() {
                   {status === "viavel" ? "Plano Viável" : status === "ajustavel" ? "Plano Ajustável" : "Plano Inviável"}
                 </span>
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:10, marginBottom:16 }}>
                 {[
                   ["Meta",                   brl(meta)],
                   ["Patrimônio atual",        brl(inicial)],

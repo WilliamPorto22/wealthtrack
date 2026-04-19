@@ -1,6 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 16px; -webkit-font-smoothing: antialiased; }
-body { background: #0D1321; color: #F0EBD8; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; overflow-x: hidden; max-width: 100%; }
+body { background: #0D1321; color: #F0EBD8; overflow-x: hidden; max-width: 100%; }
 input, button, select, textarea { font-family: inherit; }
 button { cursor: pointer; }
 ::-webkit-scrollbar { width: 4px; height: 4px; }

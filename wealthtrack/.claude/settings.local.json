@@ -46,7 +46,8 @@
       "Bash(node _test_parse.mjs)",
       "Bash(node _parser_test.mjs)",
       "Bash(firebase hosting:channel:list)",
-      "Bash(xargs wc *)"
+      "Bash(xargs wc *)",
+      "Bash(grep -n \"R\\\\$.*9860\\\\|92669\\\\|fatura.*total\\\\|invoice.*total\\\\|validat\" /c/Users/User/wealthtrack/src/utils/documentParser.js -i)"
     ]
   }
 }

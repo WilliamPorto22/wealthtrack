@@ -273,6 +273,28 @@ button:focus {
   animation: fadeInUp 0.45s ease both;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   GRID OVERFLOW PREVENTION
+   Ensures grid children never overflow their container
+   ═══════════════════════════════════════════════════════════════ */
+
+.grid-kpi > *,
+.grid-clients > *,
+.grid-objectives > *,
+.grid-assets > *,
+.grid-indicators > *,
+.grid-alerts > * {
+  min-width: 0;
+}
+
+/* Page containers - prevent horizontal overflow */
+.dashboard-content,
+.fluxo-content,
+.carteira-content {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 .animate-in-delay-1 { animation: fadeInUp 0.45s 0.08s ease both; }
 .animate-in-delay-2 { animation: fadeInUp 0.45s 0.16s ease both; }
 .animate-in-delay-3 { animation: fadeInUp 0.45s 0.24s ease both; }

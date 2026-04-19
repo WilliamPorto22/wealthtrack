@@ -30,6 +30,9 @@
   height: 64px;
   box-sizing: border-box;
   font-family: -apple-system, "SF Pro Display", sans-serif;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* NAVBAR BRAND (Logo) */

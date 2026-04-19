@@ -280,6 +280,7 @@ export default function Carteira() {
   const [snap, setSnap] = useState({});
   const [carregou, setCarregou] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [msg, setMsg] = useState("");
   const [uploadProgress, setUploadProgress] = useState(null);
   const [xpSummary, setXpSummary] = useState(null);
@@ -484,6 +485,7 @@ export default function Carteira() {
       await setDoc(doc(db, "clientes", id), patch);
       formRef.current = { ...novaCarteira };
       setSnap({ ...novaCarteira });
+      setIsEditing(false);
       setMsg("✓ Carteira atualizada e sincronizada com os demais módulos.");
       setTimeout(() => setMsg(""), 4000);
     } catch (e) {
@@ -663,7 +665,7 @@ export default function Carteira() {
           </div>
 
           {/* KPIs dentro do hero */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 14, position: "relative" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))", gap: 14, position: "relative" }}>
             <KPI label="Patrimônio Total" value={brl(total)} color={T.gold} large />
             <KPI
               label="Rentabilidade no ano"
@@ -697,12 +699,13 @@ export default function Carteira() {
 
         {/* ── COMPOSIÇÃO (pizza + tabela) ── */}
         <SectionTitle>Composição da Carteira</SectionTitle>
-        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 16, marginBottom: 22 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 22 }}>
           {/* Pizza */}
           <div style={{
             ...C.card,
             padding: "24px 20px",
             display: "flex", flexDirection: "column", alignItems: "center", gap: 18,
+            flexBasis: 300, flexShrink: 0, minWidth: 0, maxWidth: "100%",
           }}>
             <GraficoPizza
               classesAtivas={classesAtivas}
@@ -736,7 +739,8 @@ export default function Carteira() {
           </div>
 
           {/* Tabela */}
-          <div style={{ ...C.card, padding: 0, overflow: "hidden" }}>
+          <div style={{ ...C.card, padding: 0, overflowX: "auto", overflowY: "hidden", flex: 1, minWidth: 0, WebkitOverflowScrolling: "touch" }}>
+            <div style={{ minWidth: 480 }}>
             <div style={{
               display: "grid", gridTemplateColumns: "1.4fr 1fr 60px 80px 80px 1.1fr 28px",
               padding: "16px 18px", borderBottom: `0.5px solid ${T.border}`,
@@ -844,6 +848,7 @@ export default function Carteira() {
                 <span style={{ fontSize: 17, color: T.gold, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{brl(total)}</span>
               </div>
             )}
+            </div>{/* end minWidth wrapper */}
           </div>
         </div>
 
@@ -851,7 +856,7 @@ export default function Carteira() {
         {(totalNacional > 0 || totalGlobal > 0 || totalPrevidencia > 0) && (
           <>
             <SectionTitle>Balanço por Região</SectionTitle>
-            <div style={{ display: "grid", gridTemplateColumns: `repeat(${[totalNacional, totalGlobal, totalPrevidencia].filter(v => v > 0).length},1fr)`, gap: 14, marginBottom: 22 }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${[totalNacional, totalGlobal, totalPrevidencia].filter(v => v > 0).length}, minmax(0, 1fr))`, gap: 14, marginBottom: 22 }}>
               {[
                 { label: "Brasil", icon: "🇧🇷", v: totalNacional, cor: "#F0A202" },
                 { label: "Global (USD)", icon: "🌎", v: totalGlobal, cor: "#a855f7" },
@@ -971,7 +976,7 @@ export default function Carteira() {
             borderBottom: `0.5px solid ${T.border}`,
             display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
           }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(120px, 1fr))", gap: 20, flex: 1, minWidth: 320 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 20, flex: 1, minWidth: 0 }}>
               <div>
                 <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 6, ...noSel }}>Total aportado</div>
                 <div style={{ fontSize: 18, color: "#a855f7", fontWeight: 500, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{brl(aporteTotal)}</div>
@@ -1015,6 +1020,8 @@ export default function Carteira() {
             </div>
           ) : (
             <>
+              <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+              <div style={{ minWidth: 340 }}>
               <div style={{
                 display: "grid", gridTemplateColumns: "110px 1fr 140px 40px",
                 padding: "12px 24px", borderBottom: `0.5px solid ${T.border}`,
@@ -1058,6 +1065,8 @@ export default function Carteira() {
                   );
                 })}
               </div>
+              </div>{/* end minWidth wrapper */}
+              </div>{/* end overflowX wrapper */}
             </>
           )}
         </div>
@@ -1222,7 +1231,7 @@ function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddA
               cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
             }}>×</button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginTop: 14 }}>
             <div>
               <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Total</div>
               <div style={{ fontSize: 16, color: classe.cor, fontWeight: 400 }}>{brl(total)}</div>
@@ -1429,7 +1438,7 @@ function AtivoEditor({ ctx, snap, onClose, onUpdate, onMove }) {
             <InputTexto initValue={form.nome} onCommit={(v) => setF("nome", v)} placeholder="Ex: CDB Itaú IPCA+ 2030" />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             <div>
               <div style={{ ...C.label }}>Valor investido</div>
               <InputMoeda initValue={form.valor} onCommit={(v) => setF("valor", v)} />
@@ -1440,7 +1449,7 @@ function AtivoEditor({ ctx, snap, onClose, onUpdate, onMove }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             <div>
               <div style={{ ...C.label }}>Rentabilidade no mês (%)</div>
               <InputPct initValue={form.rentMes} onCommit={(v) => setF("rentMes", v)} placeholder="0,85" />
@@ -1458,7 +1467,7 @@ function AtivoEditor({ ctx, snap, onClose, onUpdate, onMove }) {
             <div style={{ fontSize: 9, color: T.gold, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 10, ...noSel }}>
               🎯 Classificação & Integração
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 10 }}>
               <div>
                 <div style={{ ...C.label }}>Classe do ativo</div>
                 <Select value={form.novaClasse} onChange={(v) => setF("novaClasse", v)} options={classesOptions} />
