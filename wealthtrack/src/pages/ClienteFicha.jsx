@@ -684,14 +684,11 @@ export default function ClienteFicha() {
   // Total patrimônio
   const patrimonioCalculado = totalCarteira+totalImoveis+totalVeiculos;
   const patrimonioManual = parseCentavos(snap.patrimonio)/100;
-  // Se a carteira foi configurada com ativos (mesmo que agora vazia), usa o calculado
-  // para evitar que o valor manual antigo "ressuscite" quando os ativos são apagados.
-  // "Engaged" = qualquer *Ativos array existe (mesmo vazio). Cliente que apagou tudo
-  // ainda está engaged → patrimônio mostra R$ 0, não ressuscita o valor manual antigo.
-  const carteiraEngaged = CLASSES_CARTEIRA.some(c=>Array.isArray(snap.carteira?.[c.key+"Ativos"]));
-  const patrimonioDisplay = (patrimonioCalculado>0||carteiraEngaged)?patrimonioCalculado:patrimonioManual;
-  // Segmento usa só patrimônio financeiro (carteira ou campo manual)
-  const patrimonioFinanceiro = (totalCarteira>0||carteiraEngaged) ? totalCarteira : patrimonioManual;
+  // Carteira é fonte da verdade quando tem ativos; vazia → usa patrimônio manual
+  // do cadastro (permite atualização direta pelo perfil mesmo após a carteira
+  // ter sido usada — ex: cliente sem carteira ativa volta a informar valor manual).
+  const patrimonioDisplay = patrimonioCalculado>0 ? patrimonioCalculado : patrimonioManual;
+  const patrimonioFinanceiro = totalCarteira>0 ? totalCarteira : patrimonioManual;
   const segmento = segmentoAuto(String(Math.round(patrimonioFinanceiro*100)));
 
   // Emergency reserve
@@ -725,7 +722,22 @@ export default function ClienteFicha() {
   }
   const pendente = id!=="novo"&&revisaoPendente();
 
-  const liquidezReserva = parseCentavos(snap.carteira?.liquidezD1)/100||parseCentavos(snap.carteira?.posFixado)/100;
+  // Se a carteira tem ativos individuais, soma só os marcados com objetivo "Liquidez".
+  // Sem ativos → cai no campo legado (liquidezD1/posFixado).
+  const liquidezReserva = (()=>{
+    const carteira = snap.carteira || {};
+    const engaged = CLASSES_CARTEIRA.some(c=>Array.isArray(carteira[c.key+"Ativos"]));
+    if(engaged){
+      return CLASSES_CARTEIRA.reduce((acc,c)=>{
+        const ativos = carteira[c.key+"Ativos"];
+        if(Array.isArray(ativos)){
+          return acc+ativos.reduce((a,at)=>a+((at.objetivo||"")==="Liquidez"?parseCentavos(at.valor)/100:0),0);
+        }
+        return acc;
+      },0);
+    }
+    return parseCentavos(carteira.liquidezD1)/100||parseCentavos(carteira.posFixado)/100;
+  })();
   const reservaStatus = reservaMeta>0&&liquidezReserva>=reservaMeta
     ? {label:"✓ Reserva OK",cor:"#22c55e",bg:"rgba(34,197,94,0.1)",border:"0.5px solid rgba(34,197,94,0.3)",labelCor:"#86efac"}
     : reservaMeta>0&&liquidezReserva>=reservaMeta*0.6
@@ -797,10 +809,10 @@ export default function ClienteFicha() {
     setNomeError(false);
     setSalvando(true);
     try{
-      const patFinal=patrimonioCalculado>0?String(Math.round(patrimonioCalculado*100)):formRef.current.patrimonio;
-      // Segmento: só patrimônio financeiro (carteira ou campo manual)
-      const patFinSeg = totalCarteira>0 ? String(Math.round(totalCarteira*100)) : formRef.current.patrimonio;
-      const seg=segmentoAuto(patFinSeg);
+      // Patrimônio = SOMENTE financeiro. NÃO inclui imóveis/veículos (são patrimônio total, não financeiro).
+      // Se a carteira tem ativos, sincroniza com a soma dela. Senão preserva o que o usuário digitou.
+      const patFinal = totalCarteira>0 ? String(Math.round(totalCarteira*100)) : formRef.current.patrimonio;
+      const seg=segmentoAuto(patFinal);
       const data={...formRef.current,segmento:seg||"",patrimonio:patFinal};
       if(id==="novo"){
         const ref=await addDoc(collection(db,"clientes"),data);
@@ -2230,8 +2242,9 @@ export default function ClienteFicha() {
 
             {/* ── SEÇÃO: Reserva de Emergência ──────────────────────── */}
             {(()=>{
-              // Proxy: posFixado é o ativo mais líquido da carteira
-              const liquidez = parseCentavos(snap.carteira?.posFixado)/100;
+              // Usa o mesmo cálculo do card superior: ativos com objetivo "Liquidez"
+              // quando a carteira tem ativos individuais; senão, cai no legado.
+              const liquidez = liquidezReserva;
               const pctAtingido = reservaMeta>0 ? Math.min((liquidez/reservaMeta)*100,100) : 0;
               const statusReserva = liquidez>=reservaMeta&&reservaMeta>0
                 ? {label:"🏆 Reserva Alinhada!",desc:"Parabéns — sua reserva cobre os 6 meses necessários.",cor:"#22c55e",bg:"rgba(34,197,94,0.07)",border:"rgba(34,197,94,0.25)"}
@@ -2270,7 +2283,7 @@ export default function ClienteFicha() {
                           {liquidez>0&&(
                             <div style={{marginTop:14}}>
                               <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                                <span style={{fontSize:10,color:T.textMuted,...noEdit}}>Renda Fixa Pós-fixada (proxy de liquidez)</span>
+                                <span style={{fontSize:10,color:T.textMuted,...noEdit}}>Ativos com objetivo Liquidez</span>
                                 <span style={{fontSize:10,color:statusReserva.cor,...noEdit}}>{pctAtingido.toFixed(0)}%</span>
                               </div>
                               <div style={{height:6,background:"rgba(255,255,255,0.07)",borderRadius:3,overflow:"hidden"}}>

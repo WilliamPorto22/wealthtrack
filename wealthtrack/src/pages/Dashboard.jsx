@@ -43,16 +43,11 @@ function brlNum(n){
   return n.toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2});
 }
 const CART_KEYS=["posFixado","ipca","preFixado","acoes","fiis","multi","prevVGBL","prevPGBL","globalEquities","globalTreasury","globalFunds","globalBonds","global","outros"];
-// Soma total do patrimônio financeiro. Prioriza arrays de ativos individuais
-// (fonte da verdade após edição na Carteira) e só cai para o total legado
-// quando a classe nunca foi granularizada. Isso evita mostrar zero quando
-// o cliente tem assets em "outros" ou em qualquer classe importada via PDF.
+// Soma total do patrimônio financeiro. Carteira é fonte da verdade quando tem
+// ativos; se estiver vazia, cai no patrimônio manual do cadastro (permite
+// atualização direta pelo perfil do cliente mesmo após a carteira ter sido usada).
 function getPatFin(c){
   const carteira=c.carteira||{};
-  // "Engaged": cliente já interagiu com a nova estrutura (qualquer *Ativos existe,
-  // mesmo array vazio). Nesse caso a carteira manda — soma 0 = patrimônio R$ 0,00.
-  // Cliente sem nenhum *Ativos nunca usou a carteira → cai no patrimônio manual do cadastro.
-  const engaged=CART_KEYS.some(k=>Array.isArray(carteira[k+"Ativos"]));
   const t=CART_KEYS.reduce((s,k)=>{
     const ativos=carteira[k+"Ativos"];
     if(Array.isArray(ativos)){
@@ -60,8 +55,8 @@ function getPatFin(c){
     }
     return s+parseInt(String(carteira[k]||"0").replace(/\D/g,""))/100;
   },0);
-  if(engaged)return t;
-  return t>0?t:parseInt(String(c.patrimonio||"0").replace(/\D/g,""))/100;
+  if(t>0)return t;
+  return parseInt(String(c.patrimonio||"0").replace(/\D/g,""))/100;
 }
 
 // Calcula patrimônio financeiro total (usa mesma lógica dos cards individuais)
@@ -99,12 +94,28 @@ function statusAporte(c){
 }
 
 // Reserva de emergência
+// Quando a carteira tem ativos individuais, só soma os explicitamente marcados
+// com objetivo "Liquidez". Sem ativos → cai no legado (liquidezD1/posFixado).
 function statusReserva(c){
   const gastos=parseInt(String(c.gastosMensaisManual||"0").replace(/\D/g,""))/100;
   const meta=gastos*6;
   if(!meta)return null;
-  const liquidez=parseInt(String(c.carteira?.liquidezD1||"0").replace(/\D/g,""))/100
-               ||parseInt(String(c.carteira?.posFixado||"0").replace(/\D/g,""))/100;
+  const carteira=c.carteira||{};
+  const engaged=CART_KEYS.some(k=>Array.isArray(carteira[k+"Ativos"]));
+  let liquidez;
+  if(engaged){
+    liquidez=CART_KEYS.reduce((acc,k)=>{
+      const ativos=carteira[k+"Ativos"];
+      if(Array.isArray(ativos)){
+        return acc+ativos.reduce((a,at)=>a+((at.objetivo||"")==="Liquidez"?parseInt(String(at.valor||"0").replace(/\D/g,""))/100:0),0);
+      }
+      return acc;
+    },0);
+  }else{
+    liquidez=parseInt(String(carteira.liquidezD1||"0").replace(/\D/g,""))/100
+           ||parseInt(String(carteira.posFixado||"0").replace(/\D/g,""))/100;
+  }
+  if(liquidez<=0)return"sem";
   return liquidez>=meta?"ok":"sem";
 }
 
