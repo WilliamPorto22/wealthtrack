@@ -49,6 +49,10 @@ const CART_KEYS=["posFixado","ipca","preFixado","acoes","fiis","multi","prevVGBL
 // o cliente tem assets em "outros" ou em qualquer classe importada via PDF.
 function getPatFin(c){
   const carteira=c.carteira||{};
+  // "Engaged": cliente já interagiu com a nova estrutura (qualquer *Ativos existe,
+  // mesmo array vazio). Nesse caso a carteira manda — soma 0 = patrimônio R$ 0,00.
+  // Cliente sem nenhum *Ativos nunca usou a carteira → cai no patrimônio manual do cadastro.
+  const engaged=CART_KEYS.some(k=>Array.isArray(carteira[k+"Ativos"]));
   const t=CART_KEYS.reduce((s,k)=>{
     const ativos=carteira[k+"Ativos"];
     if(Array.isArray(ativos)){
@@ -56,6 +60,7 @@ function getPatFin(c){
     }
     return s+parseInt(String(carteira[k]||"0").replace(/\D/g,""))/100;
   },0);
+  if(engaged)return t;
   return t>0?t:parseInt(String(c.patrimonio||"0").replace(/\D/g,""))/100;
 }
 

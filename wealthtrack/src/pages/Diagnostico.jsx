@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
@@ -556,13 +556,29 @@ export default function Diagnostico() {
   const [carregou,setCarregou] = useState(false);
 
   useEffect(()=>{
+    let vivo = true;
     async function carregar() {
       const s = await getDoc(doc(db,"clientes",id));
+      if(!vivo) return;
       if(s.exists()) setCliente({id:s.id,...s.data()});
       setCarregou(true);
     }
     carregar();
+    const onFocus = () => { carregar(); };
+    const onVisibility = () => { if(!document.hidden) carregar(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      vivo = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   },[id]);
+
+  const a = useMemo(()=>cliente?analisar(cliente):null, [cliente]);
+  const insightsAltos = useMemo(()=>a?a.insights.filter(i=>i.nivel==="alto"):[], [a]);
+  const medios = useMemo(()=>a?a.insights.filter(i=>i.nivel==="medio").length:0, [a]);
+  const top3Riscos = useMemo(()=>insightsAltos.slice(0,3), [insightsAltos]);
 
   if(!carregou) return (
     <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontFamily}}>
@@ -570,17 +586,13 @@ export default function Diagnostico() {
     </div>
   );
 
-  if(!cliente) return (
+  if(!cliente||!a) return (
     <div style={{minHeight:"100vh",background:T.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontFamily}}>
       <div style={{fontSize:13,color:T.textMuted}}>Cliente não encontrado.</div>
     </div>
   );
 
-  const a = analisar(cliente);
-  const insightsAltos = a.insights.filter(i=>i.nivel==="alto");
   const altos = insightsAltos.length;
-  const medios = a.insights.filter(i=>i.nivel==="medio").length;
-  const top3Riscos = insightsAltos.slice(0,3);
   const carteiraCadastrada = a.patrimonioFinanceiro>0;
   const fluxoCadastrado = a.gastos>0&&a.salario>0;
 

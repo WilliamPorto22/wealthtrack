@@ -652,7 +652,8 @@ export default function ClienteFicha() {
   const aporteRegistradoVal = parseCentavos(snap.aporteRegistradoMes)/100;
   const rendaMensal = parseCentavos(snap.salarioMensal)/100||parseCentavos(snap.fluxo?.renda)/100||0;
 
-  // Portfolio total — se a classe tem array de ativos usa a soma, senão usa o total legado
+  // Portfolio total — array de ativos é fonte da verdade (mesmo vazio = R$ 0).
+  // Sem array, cai no campo legado.
   const getClassTotalFicha = (c) => {
     const carteira = snap.carteira || {};
     const ativosKey = c.key + "Ativos";
@@ -685,6 +686,8 @@ export default function ClienteFicha() {
   const patrimonioManual = parseCentavos(snap.patrimonio)/100;
   // Se a carteira foi configurada com ativos (mesmo que agora vazia), usa o calculado
   // para evitar que o valor manual antigo "ressuscite" quando os ativos são apagados.
+  // "Engaged" = qualquer *Ativos array existe (mesmo vazio). Cliente que apagou tudo
+  // ainda está engaged → patrimônio mostra R$ 0, não ressuscita o valor manual antigo.
   const carteiraEngaged = CLASSES_CARTEIRA.some(c=>Array.isArray(snap.carteira?.[c.key+"Ativos"]));
   const patrimonioDisplay = (patrimonioCalculado>0||carteiraEngaged)?patrimonioCalculado:patrimonioManual;
   // Segmento usa só patrimônio financeiro (carteira ou campo manual)

@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { useEffect, useRef, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
@@ -203,9 +203,10 @@ export default function FluxoMensal() {
   const fileInputRef = useRef(null);
 
   useEffect(()=>{
+    let vivo=true;
     async function carregar(){
       const snap=await getDoc(doc(db,"clientes",id));
-      if(!snap.exists()) return;
+      if(!vivo||!snap.exists()) return;
       const data=snap.data();
       setClienteNome(data.nome||"");
       setForm(data.fluxo||{});
@@ -213,6 +214,15 @@ export default function FluxoMensal() {
       setRendaExterna(parseCentavos(data.salarioMensal)/100||0);
     }
     carregar();
+    const onFocus = () => { carregar(); };
+    const onVisibility = () => { if(!document.hidden) carregar(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      vivo=false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   },[id]);
 
   function setF(k,v){ setForm(f=>({...f,[k]:v})); }
@@ -277,9 +287,12 @@ export default function FluxoMensal() {
   }
 
   // ── Cálculos ──────────────────────────────────────────────────
-  const rendaFluxo=parseCentavos(form.renda)/100;
+  const rendaFluxo=useMemo(()=>parseCentavos(form.renda)/100, [form.renda]);
   const rendaEfetiva=rendaFluxo||rendaExterna;
-  const totalGastos=CATS.reduce((acc,{key})=>acc+(parseCentavos(form[key])/100),0);
+  const totalGastos=useMemo(
+    ()=>CATS.reduce((acc,{key})=>acc+(parseCentavos(form[key])/100),0),
+    [form]
+  );
   const sobra=rendaEfetiva-totalGastos;
   const txPoupanca=rendaEfetiva>0?Math.round((sobra/rendaEfetiva)*100):0;
 
