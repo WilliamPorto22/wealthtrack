@@ -154,13 +154,13 @@ export const C = {
 
   // Label
   label: {
-    fontSize: 10,
-    color: T.textMuted,
+    fontSize: 10.5,
+    color: "#b8c7d9",
     textTransform: "uppercase",
     letterSpacing: "0.12em",
     display: "block",
     marginBottom: 8,
-    fontWeight: 500,
+    fontWeight: 600,
   },
 
   // Botão primário (dourado)

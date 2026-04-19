@@ -100,6 +100,7 @@ function analisar(cliente) {
   const aporteMedio = parseCentavos(cliente.aporteMedio)/100;
   const metaAporte = parseCentavos(cliente.metaAporteMensal)/100;
   const patrimonioManual = parseCentavos(cliente.patrimonio)/100;
+  const liquidezDiaria = parseCentavos(cliente.liquidezDiaria)/100;
   const rentAnual = parseFloat(String(cliente.rentabilidadeAnual||"").replace(",","."))||0;
 
   const imoveis = cliente.imoveis||[];
@@ -153,8 +154,11 @@ function analisar(cliente) {
   const carrosSemSeguro = veiculos.filter(v=>v.temSeguro===false).length;
   const temFilhosDep = filhos.length>0;
   const temConjuge = estadoCivil==="Casado(a)"||estadoCivil==="União Estável";
+  // Se o cliente informou liquidez diária, usamos ela como proxy de reserva; caso contrário, pat. financeiro
+  const reservaAtual = liquidezDiaria>0?liquidezDiaria:patrimonioFinanceiro;
+  const mesesCobertos = gastos>0?reservaAtual/gastos:0;
   const protecoes = {
-    reserva: patrimonioFinanceiro>=reservaIdeal,
+    reserva: reservaAtual>=reservaIdeal&&reservaIdeal>0,
     seguroCarro: veiculos.length===0||temSeguroCarro,
     seguroVida: false, // sem campo ainda
     previdencia: false, // detectar via carteira no futuro
@@ -170,12 +174,12 @@ function analisar(cliente) {
   else if(pctSobra>0) scoreFluxo=8;
   else scoreFluxo=0;
 
-  // 2. Reserva (0-20)
+  // 2. Reserva (0-20) — usa liquidez diária se informada
   let scoreReserva = 0;
   if(reservaIdeal>0) {
-    const rPct = patrimonioFinanceiro/reservaIdeal;
+    const rPct = reservaAtual/reservaIdeal;
     scoreReserva = Math.min(rPct*20, 20);
-  } else if(patrimonioFinanceiro>0) scoreReserva = 10;
+  } else if(reservaAtual>0) scoreReserva = 10;
 
   // 3. Investimentos (0-25): rentabilidade + diversificação + patrimônio
   let scoreInvest = 0;
@@ -234,12 +238,21 @@ function analisar(cliente) {
     }
   }
 
-  if(gastos>0&&patrimonioFinanceiro<reservaIdeal&&patrimonioFinanceiro>0) {
-    const falta = reservaIdeal-patrimonioFinanceiro;
+  if(gastos>0&&reservaAtual<reservaIdeal&&reservaAtual>=0) {
+    const falta = reservaIdeal-reservaAtual;
     const mesesParaReserva = sobra>0?Math.ceil(falta/sobra):null;
-    insights.push({nivel:"medio",icon:"🛟",titulo:"Reserva de emergência incompleta",
-      texto:`Reserva ideal (6x gastos): ${moedaFull(reservaIdeal)}. Faltam ${moedaFull(falta)}.${mesesParaReserva?` Com sua sobra atual de ${moedaFull(sobra)}/mês, completamos em ${mesesParaReserva} meses.`:""} Reserva em CDB liquidez D+1 ou Tesouro Selic.`,
-      cta:"Plano de 6-12 meses para blindar a família.",
+    const nivel = mesesCobertos<3?"alto":"medio";
+    const corpo = liquidezDiaria>0
+      ? `Hoje em liquidez D+0/D+1: ${moedaFull(liquidezDiaria)} (cobre ${mesesCobertos.toFixed(1)} mês${mesesCobertos>=2?"es":""} de gastos). Ideal são 6 meses = ${moedaFull(reservaIdeal)}. Faltam ${moedaFull(falta)}.`
+      : `Reserva ideal (6x gastos): ${moedaFull(reservaIdeal)}. Faltam ${moedaFull(falta)} em liquidez imediata.`;
+    insights.push({nivel,icon:"🛟",titulo:mesesCobertos<3?"Reserva crítica — risco alto":"Reserva de emergência incompleta",
+      texto:`${corpo}${mesesParaReserva?` Com sua sobra atual de ${moedaFull(sobra)}/mês, completamos em ${mesesParaReserva} meses.`:""} Recomendação: CDB liquidez D+1, Tesouro Selic ou fundo DI.`,
+      cta:"Plano para blindar a família em 6-12 meses.",
+    });
+  } else if(gastos>0&&reservaAtual>=reservaIdeal&&reservaIdeal>0) {
+    insights.push({nivel:"baixo",icon:"🛡️",titulo:"Reserva de emergência completa",
+      texto:`Você possui ${moedaFull(reservaAtual)} em liquidez — cobre ${mesesCobertos.toFixed(1)} meses de gastos. Base sólida para operar a carteira sem pânico em crises.`,
+      cta:"Ótimo — agora podemos focar em renda passiva e crescimento.",
     });
   }
 
@@ -357,7 +370,7 @@ function analisar(cliente) {
   // ═══ PLANO DE AÇÃO 90 DIAS ═══
   const plano90 = [];
   if(sobra<0) plano90.push({prazo:"Semana 1-2",acao:"Mapear e cortar 15-20% de gastos para sair do vermelho"});
-  if(patrimonioFinanceiro<reservaIdeal&&reservaIdeal>0) plano90.push({prazo:"Mês 1",acao:`Iniciar construção da reserva de emergência (${moedaFull(reservaIdeal)})`});
+  if(reservaAtual<reservaIdeal&&reservaIdeal>0) plano90.push({prazo:"Mês 1",acao:`${mesesCobertos<3?"[URGENTE] ":""}Completar reserva de emergência (alvo: ${moedaFull(reservaIdeal)} em liquidez D+1)`});
   if(carrosSemSeguro>0) plano90.push({prazo:"Mês 1",acao:"Contratar seguro dos veículos expostos"});
   if(modeloAtend==="Comissionado (Commission Based)") plano90.push({prazo:"Mês 1",acao:"Análise de custos ocultos da carteira atual"});
   if(rentAnual<11&&rentAnual>0) plano90.push({prazo:"Mês 2",acao:"Rebalancear carteira para rentabilidade-alvo compatível com perfil"});
@@ -371,7 +384,7 @@ function analisar(cliente) {
     magicNumber, pctLiberdade, anosParaLiberdade, idadeLiberdade,
     patAos60, rendaPassivaAos60, anosAte60, idadeDesejadaAposentar,
     distribuicao, patrimonioTotal, patrimonioFinanceiro, valorImoveis, valorVeiculos,
-    reservaIdeal, sobra, pctSobra,
+    reservaIdeal, reservaAtual, liquidezDiaria, mesesCobertos, sobra, pctSobra,
     protecoes, plano90,
     salario, gastos, aporteMedio, metaAporte, rentAnual, rentReal, idade,
   };
@@ -390,22 +403,23 @@ function MiniKPI({label,valor,cor}) {
 
 // Score circular
 function ScoreCircle({score,size=140}) {
-  const r = size*0.42;
+  const r = size*0.40;
   const c = 2*Math.PI*r;
   const pct = Math.max(0,Math.min(score/100,1));
   const cor = score>=80?"#22c55e":score>=60?"#F0A202":score>=40?"#f59e0b":"#ef4444";
   const label = score>=80?"Excelente":score>=60?"Bom":score>=40?"Em construção":"Frágil";
+  const svgH = size+22;
   return (
-    <div style={{position:"relative",width:size,height:size,flexShrink:0,...noEdit}}>
-      <svg width={size} height={size}>
+    <div style={{flexShrink:0,...noEdit}}>
+      <svg width={size} height={svgH}>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={size*0.065}/>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={cor} strokeWidth={size*0.065}
           strokeDasharray={`${c*pct} ${c}`} strokeLinecap="round"
           transform={`rotate(-90 ${size/2} ${size/2})`}/>
-        <text x={size/2} y={size/2-2} textAnchor="middle" fontSize={size*0.27} fill={T.textPrimary} fontFamily={T.fontFamily} fontWeight="300">{score}</text>
-        <text x={size/2} y={size/2+16} textAnchor="middle" fontSize={size*0.075} fill={T.textMuted} fontFamily={T.fontFamily} letterSpacing="0.1em">/ 100</text>
+        <text x={size/2} y={size/2+size*0.10} textAnchor="middle" fontSize={size*0.26} fill={T.textPrimary} fontFamily={T.fontFamily} fontWeight="300">{score}</text>
+        <text x={size/2} y={size/2+size*0.22} textAnchor="middle" fontSize={size*0.072} fill={T.textMuted} fontFamily={T.fontFamily} letterSpacing="0.1em">/ 100</text>
+        <text x={size/2} y={size+16} textAnchor="middle" fontSize={12} fill={cor} fontFamily={T.fontFamily} fontWeight="500" letterSpacing="0.04em">{label}</text>
       </svg>
-      <div style={{position:"absolute",bottom:-8,left:0,right:0,textAlign:"center",fontSize:11,color:cor,fontWeight:500,letterSpacing:"0.05em"}}>{label}</div>
     </div>
   );
 }
@@ -609,7 +623,7 @@ export default function Diagnostico() {
         </div>
 
         {/* ═══ SCORE DETALHADO ═══ */}
-        <SectionCard icon="🧭" titulo="Score Financeiro por Área" subtitulo="Notas baseadas em padrões CFP/Ancord — pontos fortes e gaps" accent="#F0A202">
+        <SectionCard icon="🧭" titulo="Score Financeiro por Área" accent="#F0A202">
           {a.scores.map(s=><ScoreBar key={s.label} {...s}/>)}
         </SectionCard>
 
@@ -680,7 +694,7 @@ export default function Diagnostico() {
 
         {/* ═══ PROTEÇÃO PATRIMONIAL ═══ */}
         <SectionCard icon="🛡️" titulo="Blindagem Patrimonial" subtitulo="Proteções essenciais para sua família e patrimônio" accent="#a78bfa">
-          <ProtecaoItem label="Reserva de emergência" ok={a.protecoes.reserva} desc={`Ideal: ${moedaFull(a.reservaIdeal)} em liquidez`}/>
+          <ProtecaoItem label="Reserva de emergência" ok={a.protecoes.reserva} desc={a.liquidezDiaria>0?`${moedaFull(a.liquidezDiaria)} em liquidez · ${a.mesesCobertos.toFixed(1)} meses cobertos (ideal: 6)`:`Ideal: ${moedaFull(a.reservaIdeal)} em liquidez`}/>
           <ProtecaoItem label="Seguro de veículos" ok={a.protecoes.seguroCarro} desc="Proteção contra sinistros"/>
           <ProtecaoItem label="Seguro de vida" ok={a.protecoes.seguroVida} desc="Proteção para dependentes"/>
           <ProtecaoItem label="Planejamento sucessório" ok={a.protecoes.sucessao} desc="Evita ITCMD + inventário caro"/>

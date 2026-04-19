@@ -181,10 +181,11 @@ const InputMoeda = memo(function InputMoeda({initValue,onCommit,placeholder="R$ 
   return <input style={C.input} placeholder={placeholder} value={fmt(raw)} onChange={handleChange}/>;
 });
 
-const InputTexto = memo(function InputTexto({initValue,onCommit,placeholder="",type="text"}) {
+const InputTexto = memo(function InputTexto({initValue,onCommit,placeholder="",type="text",hasError=false,inputRef=null,onFocus=null}) {
   const [val,setVal] = useState(initValue||"");
   function handleChange(e) { setVal(e.target.value); onCommit(e.target.value); }
-  return <input style={C.input} type={type} placeholder={placeholder} value={val} onChange={handleChange}/>;
+  const errStyle = hasError?{border:"1px solid #ef4444",background:"rgba(239,68,68,0.06)",boxShadow:"0 0 0 3px rgba(239,68,68,0.12)"}:null;
+  return <input ref={inputRef} onFocus={onFocus} style={{...C.input,...(errStyle||{})}} type={type} placeholder={placeholder} value={val} onChange={handleChange}/>;
 });
 
 const TextareaLocal = memo(function TextareaLocal({initValue,onCommit,placeholder=""}) {
@@ -321,20 +322,28 @@ function MultiSelect({values,onChange,options,placeholder="Selecione"}) {
 }
 
 // Pills de múltipla escolha inline (para rápida seleção — ex: estado civil, foco)
-function PillChoice({value,onChange,options}) {
+function PillChoice({value,onChange,options,allowDeselect=true}) {
+  const [hoverIdx,setHoverIdx] = useState(-1);
   return (
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-      {options.map(opt=>{
+      {options.map((opt,idx)=>{
         const sel = value===opt;
+        const hover = hoverIdx===idx && !sel;
         return (
-          <button key={opt} type="button" onClick={()=>onChange(sel?"":opt)}
+          <button key={opt} type="button"
+            onClick={()=>onChange(sel && allowDeselect?"":opt)}
+            onMouseEnter={()=>setHoverIdx(idx)}
+            onMouseLeave={()=>setHoverIdx(-1)}
             style={{
-              padding:"9px 14px",borderRadius:20,fontSize:12,
-              background:sel?"rgba(240,162,2,0.14)":"rgba(255,255,255,0.03)",
-              border:sel?"0.5px solid rgba(240,162,2,0.5)":`0.5px solid ${T.border}`,
-              color:sel?"#F0A202":T.textSecondary,
-              cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.01em",
-              transition:"all 0.18s",...noEdit,
+              padding:"10px 16px",borderRadius:20,fontSize:12.5,
+              background:sel?"rgba(240,162,2,0.16)":hover?"rgba(240,162,2,0.06)":"rgba(255,255,255,0.03)",
+              border:sel?"0.5px solid rgba(240,162,2,0.55)":hover?"0.5px solid rgba(240,162,2,0.3)":`0.5px solid ${T.border}`,
+              color:sel?"#F0A202":hover?"#F0EBD8":T.textSecondary,
+              fontFamily:"inherit",letterSpacing:"0.01em",
+              transition:"all 0.16s",userSelect:"none",WebkitUserSelect:"none",
+              cursor:"pointer",
+              transform:hover?"translateY(-1px)":"none",
+              boxShadow:sel?"0 2px 8px rgba(240,162,2,0.12)":"none",
             }}>
             {opt}
           </button>
@@ -549,6 +558,7 @@ export default function ClienteFicha() {
     gastosMensaisManual:"",aporteRegistradoMes:"",
     salarioMensal:"",metaAporteMensal:"",aporteMedio:"",diaAporte:"",
     rentabilidadeAnual:"",focoInvestimento:"",
+    liquidezDiaria:"",
     imoveis:[],veiculos:[],veiculoValor:"",
     objetivosInteresse:[],
   });
@@ -563,6 +573,8 @@ export default function ClienteFicha() {
   const [salvando,setSalvando] = useState(false);
   const [msg,setMsg] = useState("");
   const [carregou,setCarregou] = useState(false);
+  const [nomeError,setNomeError] = useState(false);
+  const nomeFieldRef = useRef(null);
 
   const [modalAporte,setModalAporte] = useState(false);
   const [valorAporteInput,setValorAporteInput] = useState("");
@@ -731,12 +743,24 @@ export default function ClienteFicha() {
   function removerImovel(i){const n=(snap.imoveis||[]).filter((_,idx)=>idx!==i);setFSnap("imoveis",n);}
   function atualizarImovel(i,campo,valor){const n=(snap.imoveis||[]).map((im,idx)=>idx===i?{...im,[campo]:valor}:im);setFSnap("imoveis",n);}
 
-  function adicionarVeiculo(){const n=[...(snap.veiculos||[]),{tipo:"Carro",modelo:"",quantidade:1,faixa:"R$ 50.000,00",temSeguro:false,valorSeguro:""}];setFSnap("veiculos",n);}
+  function adicionarVeiculo(){const n=[...(snap.veiculos||[]),{tipo:"Carro",modelo:"",quantidade:1,faixa:"R$ 50.000,00",temSeguro:null,valorSeguro:""}];setFSnap("veiculos",n);}
   function removerVeiculo(i){const n=(snap.veiculos||[]).filter((_,idx)=>idx!==i);setFSnap("veiculos",n);}
   function atualizarVeiculo(i,campo,valor){const n=(snap.veiculos||[]).map((v,idx)=>idx===i?{...v,[campo]:valor}:v);setFSnap("veiculos",n);}
 
   async function salvar(){
-    if(!formRef.current.nome){setMsg("Nome é obrigatório.");return;}
+    if(!formRef.current.nome||!formRef.current.nome.trim()){
+      setNomeError(true);
+      setMsg("⚠ Preencha o nome do cliente para continuar.");
+      if(nomeFieldRef.current){
+        nomeFieldRef.current.scrollIntoView({behavior:"smooth",block:"center"});
+        setTimeout(()=>{
+          const el = nomeFieldRef.current?.querySelector("input");
+          if(el) el.focus();
+        },500);
+      }
+      return;
+    }
+    setNomeError(false);
     setSalvando(true);
     try{
       const patFinal=patrimonioCalculado>0?String(Math.round(patrimonioCalculado*100)):formRef.current.patrimonio;
@@ -1181,9 +1205,22 @@ export default function ClienteFicha() {
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12}}>
-              <div style={{gridColumn:"1/-1"}}>
+              <div style={{gridColumn:"1/-1"}} ref={nomeFieldRef}>
                 <Lbl>Nome completo <span style={{color:"#F0A202"}}>*</span></Lbl>
-                <InputTexto key={`nome-${id}`} initValue={snap.nome} onCommit={v=>setFSnap("nome",v)} placeholder="Como você gostaria de ser chamado"/>
+                <InputTexto
+                  key={`nome-${id}`}
+                  initValue={snap.nome}
+                  onCommit={v=>{setFSnap("nome",v);if(v&&v.trim()&&nomeError)setNomeError(false);}}
+                  onFocus={()=>{if(nomeError)setNomeError(false);}}
+                  hasError={nomeError}
+                  placeholder="Como você gostaria de ser chamado"
+                />
+                {nomeError&&(
+                  <div style={{fontSize:11,color:"#ef4444",marginTop:6,display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:13}}>⚠</span>
+                    <span>Este campo é obrigatório para gerarmos o diagnóstico.</span>
+                  </div>
+                )}
               </div>
               <div>
                 <Lbl>Idade ou data de nascimento</Lbl>
@@ -1305,10 +1342,36 @@ export default function ClienteFicha() {
             {/* ═══ SEÇÃO 5: PATRIMÔNIO FINANCEIRO ═════════════════════ */}
             <SectionTitle icon="📊" subtitle="Investimentos que você já possui">Patrimônio Financeiro</SectionTitle>
 
-            <div style={{marginBottom:16}}>
-              <Lbl>Patrimônio financeiro total (manual)</Lbl>
-              <InputMoeda key={`pat-${id}`} initValue={snap.patrimonio} onCommit={v=>setFSnap("patrimonio",v)}/>
-              <div style={{fontSize:10,color:T.textMuted,marginTop:6,...noEdit}}>Preenchido automaticamente depois, quando cadastrar a carteira em detalhe</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:16}}>
+              <div>
+                <Lbl>Patrimônio financeiro total (manual)</Lbl>
+                <InputMoeda key={`pat-${id}`} initValue={snap.patrimonio} onCommit={v=>setFSnap("patrimonio",v)}/>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:6,...noEdit}}>Preenchido automaticamente quando cadastrar a carteira</div>
+              </div>
+              <div>
+                <Lbl>Liquidez diária disponível <span style={{color:T.textMuted}}>(reserva de emergência)</span></Lbl>
+                <InputMoeda key={`liq-${id}`} initValue={snap.liquidezDiaria} onCommit={v=>setFSnap("liquidezDiaria",v)}/>
+                {(()=>{
+                  const liq = parseCentavos(snap.liquidezDiaria)/100;
+                  const gasto = parseCentavos(snap.gastosMensaisManual)/100;
+                  if(liq>0&&gasto>0){
+                    const meses = liq/gasto;
+                    const reservaIdeal = gasto*6;
+                    const pct = Math.min(meses/6*100,100);
+                    const cor = meses>=6?"#22c55e":meses>=3?"#F0A202":"#ef4444";
+                    const label = meses>=6?`✓ ${meses.toFixed(1)} meses cobertos — reserva completa`:meses>=3?`${meses.toFixed(1)} meses — faltam ${(reservaIdeal-liq).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} para os 6 meses`:`⚠ Apenas ${meses.toFixed(1)} mês(es) de cobertura — risco alto`;
+                    return (
+                      <div style={{marginTop:8}}>
+                        <div style={{height:3,background:"rgba(255,255,255,0.06)",borderRadius:2,overflow:"hidden",marginBottom:5}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:cor,borderRadius:2,transition:"width 0.3s"}}/>
+                        </div>
+                        <div style={{fontSize:10,color:cor,letterSpacing:"0.01em"}}>{label}</div>
+                      </div>
+                    );
+                  }
+                  return <div style={{fontSize:10,color:T.textMuted,marginTop:6,...noEdit}}>Valor que pode resgatar em D+0/D+1 — usaremos para calcular cobertura de 6 meses de gastos</div>;
+                })()}
+              </div>
             </div>
 
             {/* ═══ SEÇÃO 6: PATRIMÔNIO IMOBILIÁRIO ═════════════════════ */}
@@ -1379,11 +1442,15 @@ export default function ClienteFicha() {
                 </div>
                 <div style={{marginBottom:10}}>
                   <Lbl>Tem seguro?</Lbl>
-                  <PillChoice value={v.temSeguro?"Sim":v.temSeguro===false&&v.valorSeguro===""?"":v.temSeguro===false?"Não":""} onChange={val=>{
-                    if(val==="Sim") atualizarVeiculo(i,"temSeguro",true);
-                    else if(val==="Não") {atualizarVeiculo(i,"temSeguro",false);atualizarVeiculo(i,"valorSeguro","");}
-                    else atualizarVeiculo(i,"temSeguro",null);
-                  }} options={["Sim","Não"]}/>
+                  <PillChoice
+                    value={v.temSeguro===true?"Sim":v.temSeguro===false?"Não":""}
+                    allowDeselect={false}
+                    onChange={val=>{
+                      if(val==="Sim") atualizarVeiculo(i,"temSeguro",true);
+                      else if(val==="Não") {atualizarVeiculo(i,"temSeguro",false);atualizarVeiculo(i,"valorSeguro","");}
+                    }}
+                    options={["Sim","Não"]}
+                  />
                 </div>
                 {v.temSeguro===true&&(
                   <div>
