@@ -18,12 +18,14 @@ export const CLASSES_CARTEIRA = [
 
 // Mapeia o `tipo` do objetivo para o valor armazenado em `ativo.objetivo`
 // (os selects da Carteira.jsx usam estes rótulos).
+// IMPORTANTE: estes labels são os MESMOS usados nos selects de objetivo do ativo.
+// Mantenha sincronizado com OBJETIVO_TIPOS abaixo.
 export const TIPO_OBJETIVO_PARA_LABEL = {
   aposentadoria:       "Aposentadoria",
   imovel:              "Aquisição de Imóvel",
   liquidez:            "Liquidez",
   carro:               "Compra de carro",
-  oportunidade:        "Oportunidade",
+  oportunidade:        "Reserva de oportunidade",
   viagem:              "Viagem",
   educacao:            "Educação",
   saude:               "Saúde",
@@ -32,6 +34,89 @@ export const TIPO_OBJETIVO_PARA_LABEL = {
   planoSaude:          "Plano de Saúde",
   personalizado:       "Outros",
 };
+
+// Reverse map: label do select de ativo → tipo de objetivo
+export const LABEL_PARA_TIPO_OBJETIVO = Object.fromEntries(
+  Object.entries(TIPO_OBJETIVO_PARA_LABEL).map(([t, l]) => [l, t])
+);
+
+// Lista canônica de labels (ordem de exibição no select da Carteira)
+export const OBJETIVO_LABELS = [
+  "Liquidez",
+  "Reserva de oportunidade",
+  "Aposentadoria",
+  "Aquisição de Imóvel",
+  "Compra de carro",
+  "Viagem",
+  "Educação",
+  "Saúde",
+  "Sucessão",
+  "Seguros",
+  "Plano de Saúde",
+  "Outros",
+];
+
+// Lista canônica de TIPOS de objetivo (com label "longo" usado nos cards de Objetivos.jsx).
+// Espelha o que TIPOS define em src/pages/Objetivos.jsx.
+export const OBJETIVO_TIPOS = [
+  { id: "aposentadoria",       label: "Aposentadoria e Liberdade Financeira" },
+  { id: "imovel",              label: "Aquisição de Imóvel" },
+  { id: "liquidez",            label: "Liquidez / Reserva de Emergência" },
+  { id: "carro",               label: "Comprar Veículo" },
+  { id: "oportunidade",        label: "Reserva de Oportunidade" },
+  { id: "viagem",              label: "Viagens e Experiências" },
+  { id: "educacao",            label: "Educação dos Filhos" },
+  { id: "saude",               label: "Saúde e Qualidade de Vida" },
+  { id: "sucessaoPatrimonial", label: "Sucessão Patrimonial" },
+  { id: "seguros",             label: "Seguro de Vida e de Veículos" },
+  { id: "planoSaude",          label: "Plano de Saúde" },
+  { id: "personalizado",       label: "Objetivo Personalizado" },
+];
+
+// Cria um objetivo stub a partir do label do select de ativo
+// (usado quando o cliente vincula um ativo a um objetivo que ainda não existe)
+export function criarObjetivoStub(labelDoAtivo) {
+  const tipo = LABEL_PARA_TIPO_OBJETIVO[labelDoAtivo];
+  if (!tipo) return null;
+  const tipoMeta = OBJETIVO_TIPOS.find(t => t.id === tipo);
+  if (!tipoMeta) return null;
+  return {
+    tipo,
+    label: tipoMeta.label,
+    patrimSource: "ativos",
+    ativosVinculados: [],
+    patrimAtual: "",
+    aporte: "",
+    meta: "",
+    prazo: "",
+    _stub: true,
+    criadoAutomaticamente: true,
+  };
+}
+
+// Garante que todo `ativo.objetivo` referenciado pela carteira tenha um
+// objetivo correspondente na lista de objetivos do cliente. Cria stubs
+// para os faltantes. Retorna a nova lista (ou a original se nada mudou).
+export function garantirObjetivosVinculados(carteira, objetivosAtuais) {
+  const lista = Array.isArray(objetivosAtuais) ? objetivosAtuais : [];
+  const labelsExistentes = new Set(
+    lista.map(o => TIPO_OBJETIVO_PARA_LABEL[o.tipo]).filter(Boolean)
+  );
+  const labelsVinculados = new Set();
+  for (const classe of CLASSES_CARTEIRA) {
+    const ativos = carteira?.[classe.key + "Ativos"] || [];
+    for (const a of ativos) {
+      if (a.objetivo) labelsVinculados.add(a.objetivo);
+    }
+  }
+  const novos = [];
+  for (const label of labelsVinculados) {
+    if (labelsExistentes.has(label)) continue;
+    const stub = criarObjetivoStub(label);
+    if (stub) novos.push(stub);
+  }
+  return novos.length > 0 ? [...lista, ...novos] : lista;
+}
 
 function parseCentavos(s) {
   return parseInt(String(s || "0").replace(/\D/g, "")) || 0;

@@ -5,6 +5,7 @@ import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
 import { T, C } from "../theme";
 import { extractText, parseCarteiraFromText } from "../utils/documentParser";
+import { OBJETIVO_LABELS, garantirObjetivosVinculados } from "../utils/ativos";
 import { AvatarIcon } from "./Dashboard";
 
 // ══════════════════════════════════════════════════════════════
@@ -93,10 +94,9 @@ const GRUPOS = [
 const CLASSES = GRUPOS.flatMap((g) => g.classes);
 const classByKey = Object.fromEntries(CLASSES.map((c) => [c.key, c]));
 
-const OBJETIVOS = [
-  "Liquidez", "Reserva de oportunidade", "Aposentadoria", "Aquisição de Imóvel",
-  "Compra de carro", "Viagem", "Educação", "Saúde", "Sucessão", "Outros",
-];
+// Lista canônica vem de utils/ativos.js — mantém em sync com Objetivos.jsx
+// e com a criação automática de stubs (garantirObjetivosVinculados).
+const OBJETIVOS = OBJETIVO_LABELS;
 
 const SEGMENTOS = {
   acoes: [
@@ -179,6 +179,7 @@ const InputDate = memo(function InputDate({ initValue, onCommit }) {
 });
 
 function Select({ value, onChange, options, placeholder = "—" }) {
+  const optStyle = { background: T.bgCard, color: T.textPrimary };
   return (
     <select
       value={value || ""}
@@ -188,18 +189,23 @@ function Select({ value, onChange, options, placeholder = "—" }) {
         background: "rgba(255,255,255,0.04)",
         border: `0.5px solid ${T.border}`,
         borderRadius: T.radiusSm,
-        color: value ? T.textPrimary : T.textMuted,
+        color: T.textPrimary,
         fontSize: 12,
         padding: "10px 12px",
         fontFamily: T.fontFamily,
         cursor: "pointer",
         outline: "none",
         appearance: "none",
+        colorScheme: "dark",
       }}
     >
-      <option value="">{placeholder}</option>
+      <option value="" style={{ ...optStyle, color: T.textMuted }}>{placeholder}</option>
       {options.map((o) => (
-        <option key={typeof o === "string" ? o : o.value} value={typeof o === "string" ? o : o.value}>
+        <option
+          key={typeof o === "string" ? o : o.value}
+          value={typeof o === "string" ? o : o.value}
+          style={optStyle}
+        >
           {typeof o === "string" ? o : o.label}
         </option>
       ))}
@@ -486,8 +492,15 @@ export default function Carteira() {
         atualizadoEm: hojeBr(),
       };
 
+      // Auto-cria objetivos-stub para qualquer ativo vinculado a um objetivo
+      // (ex: Liquidez, Reserva de oportunidade) que ainda não existe na lista.
+      // Esses stubs aparecem em /objetivos para o assessor configurar o plano.
+      const objetivosAtuais = Array.isArray(dados.objetivos) ? dados.objetivos : [];
+      const objetivosFinal = garantirObjetivosVinculados(novaCarteira, objetivosAtuais);
+      const stubsCriados = objetivosFinal.length - objetivosAtuais.length;
+
       // Atualiza aporteRegistradoMes no root do cliente (compat dashboard)
-      const patch = { ...dados, carteira: novaCarteira };
+      const patch = { ...dados, carteira: novaCarteira, objetivos: objetivosFinal };
       if (aporteMesAtual > 0) {
         patch.aporteRegistradoMes = String(Math.round(aporteMesAtual * 100));
         patch.aporteRegistradoMesEm = mesAtualStr();
@@ -498,7 +511,10 @@ export default function Carteira() {
       formRef.current = { ...novaCarteira };
       setSnap({ ...novaCarteira });
       setIsEditing(false);
-      setMsg("✓ Carteira atualizada e sincronizada com os demais módulos.");
+      const msgBase = "✓ Carteira atualizada e sincronizada com os demais módulos.";
+      setMsg(stubsCriados > 0
+        ? `${msgBase} (${stubsCriados} objetivo${stubsCriados > 1 ? "s" : ""} criado${stubsCriados > 1 ? "s" : ""} automaticamente — configure o plano em Objetivos.)`
+        : msgBase);
       setTimeout(() => setMsg(""), 4000);
     } catch (e) {
       setMsg("Erro: " + e.message);
@@ -518,7 +534,12 @@ export default function Carteira() {
       const d = new Date(a.data);
       return `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}` === mes;
     }).reduce((acc, a) => acc + parseCentavos(a.valor) / 100, 0);
-    const patch = { ...dados, carteira: novaCarteira };
+
+    // Garante que objetivos referenciados em ativos existam (cria stubs).
+    const objetivosAtuais = Array.isArray(dados.objetivos) ? dados.objetivos : [];
+    const objetivosFinal = garantirObjetivosVinculados(novaCarteira, objetivosAtuais);
+
+    const patch = { ...dados, carteira: novaCarteira, objetivos: objetivosFinal };
     if (aporteMes > 0) {
       patch.aporteRegistradoMes = String(Math.round(aporteMes * 100));
       patch.aporteRegistradoMesEm = mes;
@@ -1728,6 +1749,7 @@ function SectionHeader({ children }) {
 }
 
 function SelectLg({ value, onChange, options, placeholder = "—" }) {
+  const optStyle = { background: T.bgCard, color: T.textPrimary };
   return (
     <select
       value={value || ""}
@@ -1737,7 +1759,7 @@ function SelectLg({ value, onChange, options, placeholder = "—" }) {
         background: "rgba(255,255,255,0.04)",
         border: `0.5px solid ${T.border}`,
         borderRadius: T.radiusMd,
-        color: value ? T.textPrimary : T.textMuted,
+        color: T.textPrimary,
         fontSize: 14,
         padding: "13px 16px",
         fontFamily: T.fontFamily,
@@ -1745,11 +1767,16 @@ function SelectLg({ value, onChange, options, placeholder = "—" }) {
         outline: "none",
         appearance: "none",
         letterSpacing: "0.01em",
+        colorScheme: "dark",
       }}
     >
-      <option value="">{placeholder}</option>
+      <option value="" style={{ ...optStyle, color: T.textMuted }}>{placeholder}</option>
       {options.map((o) => (
-        <option key={typeof o === "string" ? o : o.value} value={typeof o === "string" ? o : o.value}>
+        <option
+          key={typeof o === "string" ? o : o.value}
+          value={typeof o === "string" ? o : o.value}
+          style={optStyle}
+        >
           {typeof o === "string" ? o : o.label}
         </option>
       ))}

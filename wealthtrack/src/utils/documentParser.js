@@ -822,8 +822,20 @@ function classifyAtivo(name, contextBefore) {
 
 function _parseAtivosGenerico(text) {
   const result = {};
-  // Normaliza quebras e remove caracteres OCR lixo comuns
-  const clean = text.replace(/\r/g, "").replace(/[«»"·¬]/g, "");
+  // Normaliza quebras e remove caracteres OCR lixo comuns.
+  // Junta "Rent. mês atual\n0,28%" (label e valor em linhas separadas — OCR por coluna)
+  // em uma única linha antes de processar.
+  const clean = text
+    .replace(/\r/g, "")
+    .replace(/[«»"·¬]/g, "")
+    .replace(
+      /(rent(?:abilidade|\.)?\s*(?:no\s+)?m[êeé]s(?:\s+atual)?)\s*\n\s*(-?[\d,]+\s*%)/gi,
+      "$1 $2"
+    )
+    .replace(
+      /(rent(?:abilidade|\.)?\s*(?:no\s+)?ano)\s*\n\s*(-?[\d,]+\s*%)/gi,
+      "$1 $2"
+    );
   const rawLines = clean.split(/\n+/).map(l => l.trim()).filter(Boolean);
   if (rawLines.length === 0) return result;
 
@@ -889,18 +901,57 @@ function _parseAtivosGenerico(text) {
     // Limpa sufixos "- Renda Fixa" do nome (mantém ticker se houver)
     const nomeLimpo = nome.replace(/\s+[-–]\s+(renda\s+fixa|a[çc][õo]es|fii|fundo.*|multimercado).*/i, "").trim();
 
-    // Rentabilidade: busca "X,XX%" ou "rent. mês X,XX%" nas próximas 6 linhas
+    // Rentabilidade: busca "X,XX%" ou "rent. mês X,XX%" nas próximas 10 linhas
+    // Inclui tolerância para OCR que separa label e valor em linhas diferentes.
     let rentMes = "";
     let rentAno = "";
-    for (let j = i; j < Math.min(lines.length, i + 6); j++) {
+    const RENT_MES_RE = /rent(?:abilidade|\.)?\s*(?:no\s+)?m[êeé]s(?:\s+atual)?\s*:?\s*(-?[\d,]+)\s*%/i;
+    const RENT_ANO_RE = /rent(?:abilidade|\.)?\s*(?:no\s+)?ano\s*:?\s*(-?[\d,]+)\s*%/i;
+    for (let j = i; j < Math.min(lines.length, i + 10); j++) {
       const lj = lines[j].t;
-      const rm = lj.match(/rent(?:abilidade|\.)?\s*(?:no\s+)?m[êe]s(?:\s+atual)?\s*:?\s*(-?[\d,]+)\s*%/i);
-      if (rm && !rentMes) rentMes = rm[1].replace(",", ".");
-      const ra = lj.match(/rent(?:abilidade|\.)?\s*(?:no\s+)?ano\s*:?\s*(-?[\d,]+)\s*%/i);
-      if (ra && !rentAno) rentAno = ra[1].replace(",", ".");
-      // "rendeu ↑ R$ X (Y,YY%)" → interpreta como rent do período (coloca em rentMes se vazio)
+      const rm = lj.match(RENT_MES_RE);
+      if (rm && !rentMes) { rentMes = rm[1].replace(",", "."); }
+      else if (!rentMes && /rent(?:abilidade|\.)?\s*(?:no\s+)?m[êeé]s(?:\s+atual)?/i.test(lj)) {
+        // Label sem valor na mesma linha — tenta a próxima linha
+        const nextPct = lines[j + 1]?.t?.match(/^\s*(-?[\d,]+)\s*%\s*$/);
+        if (nextPct) rentMes = nextPct[1].replace(",", ".");
+      }
+      const ra = lj.match(RENT_ANO_RE);
+      if (ra && !rentAno) { rentAno = ra[1].replace(",", "."); }
+      else if (!rentAno && /rent(?:abilidade|\.)?\s*(?:no\s+)?ano/i.test(lj)) {
+        const nextPct = lines[j + 1]?.t?.match(/^\s*(-?[\d,]+)\s*%\s*$/);
+        if (nextPct) rentAno = nextPct[1].replace(",", ".");
+      }
+      // "rendeu ↑ R$ X (Y,YY%)" → interpreta como rent do período
       const rd = lj.match(/rendeu.*?\(\s*(-?[\d,]+)\s*%\s*\)/i);
       if (rd && !rentMes) rentMes = rd[1].replace(",", ".");
+    }
+
+    // Busca para trás: OCR coluna-por-coluna coloca "Rent. mês atual" na coluna
+    // esquerda (antes do R$ âncora). Procura entre as linhas anteriores sem R$.
+    if (!rentMes) {
+      for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+        const lj = lines[j].t;
+        if (lines[j].hasVal) break; // encontrou outro R$ — já é outro ativo
+        const rm = lj.match(RENT_MES_RE);
+        if (rm) { rentMes = rm[1].replace(",", "."); break; }
+        if (/rent(?:abilidade|\.)?\s*(?:no\s+)?m[êeé]s(?:\s+atual)?/i.test(lj)) {
+          // label sem % — o valor está provavelmente depois do i (direita)
+          for (let k = i + 1; k < Math.min(lines.length, i + 5); k++) {
+            const nk = lines[k].t.match(/^\s*(-?[\d,]+)\s*%\s*$/);
+            if (nk) { rentMes = nk[1].replace(",", "."); break; }
+          }
+          break;
+        }
+      }
+    }
+    if (!rentAno) {
+      for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+        const lj = lines[j].t;
+        if (lines[j].hasVal) break;
+        const ra = lj.match(RENT_ANO_RE);
+        if (ra) { rentAno = ra[1].replace(",", "."); break; }
+      }
     }
 
     const dedupeKey = nomeLimpo.toUpperCase() + "|" + valor;
