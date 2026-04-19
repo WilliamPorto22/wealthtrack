@@ -121,6 +121,36 @@ const FAIXAS_VEICULO = [
   {label:"R$ 1.000.000,00",mid:1000000},
   {label:"Acima de R$ 1M",mid:1200000},
 ];
+const ESTADO_CIVIL = ["Solteiro(a)","Casado(a)","União Estável","Divorciado(a)","Viúvo(a)"];
+const FOCOS_INVESTIMENTO = ["Dividendos / Renda","Valorização / Crescimento","Equilibrado (dividendos + valorização)"];
+const MODELO_ATENDIMENTO = ["Fee Based","Comissionado (Commission Based)"];
+const DIAS_MES = Array.from({length:31},(_,i)=>String(i+1).padStart(2,"0"));
+const VEICULOS_BRASIL = [
+  "Fiat Strada","Volkswagen Polo","Chevrolet Onix","Hyundai HB20","Fiat Mobi",
+  "Fiat Argo","Chevrolet Tracker","Volkswagen T-Cross","Toyota Corolla Cross","Fiat Pulse",
+  "Hyundai Creta","Jeep Compass","Jeep Renegade","Honda HR-V","Volkswagen Nivus",
+  "Nissan Kicks","Volkswagen Saveiro","Volkswagen Virtus","Renault Kwid","Toyota Corolla",
+  "Chevrolet S10","Ford Ranger","Toyota Hilux","Volkswagen Amarok","Fiat Toro",
+  "Jeep Commander","Volkswagen Taos","Honda Civic","Toyota Yaris","Honda City",
+  "Chevrolet Spin","Chevrolet Montana","Renault Kardian","Renault Duster","Nissan Sentra",
+  "Peugeot 208","Peugeot 2008","Citroën C3","Volkswagen Tiguan","Toyota SW4",
+  "BMW X1","Mercedes-Benz GLA","Audi Q3","Volvo XC40","Porsche Macan",
+  "Range Rover Evoque","Honda CR-V","Hyundai Tucson","Chevrolet Trailblazer","Mitsubishi L200",
+  "Outros",
+];
+const OBJETIVOS_CADASTRO = [
+  {id:"aposentadoria",label:"Aposentadoria e Liberdade Financeira",icon:"🌴"},
+  {id:"imovel",label:"Aquisição de Imóvel",icon:"🏡"},
+  {id:"liquidez",label:"Reserva de Emergência",icon:"🛟"},
+  {id:"carro",label:"Comprar Veículo",icon:"🚗"},
+  {id:"oportunidade",label:"Reserva de Oportunidade",icon:"💎"},
+  {id:"viagem",label:"Viagens e Experiências",icon:"✈️"},
+  {id:"educacao",label:"Educação dos Filhos",icon:"🎓"},
+  {id:"saude",label:"Saúde e Qualidade de Vida",icon:"❤️"},
+  {id:"sucessaoPatrimonial",label:"Sucessão Patrimonial",icon:"👨‍👩‍👧‍👦"},
+  {id:"seguros",label:"Seguro de Vida e de Veículos",icon:"🛡️"},
+  {id:"planoSaude",label:"Plano de Saúde",icon:"🏥"},
+];
 const CLASSES_CARTEIRA = [
   {key:"posFixado",      label:"Pós-Fixado",           cor:"#2563eb"},
   {key:"ipca",           label:"IPCA+",                cor:"#3b82f6"},
@@ -187,6 +217,129 @@ function CustomSelect({value,onChange,options,placeholder="Selecione"}) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Título de seção premium — grande, bold, com barra dourada
+function SectionTitle({children, icon, subtitle}) {
+  return (
+    <div style={{marginTop:32,marginBottom:18,...noEdit}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
+        <div style={{width:3,height:22,borderRadius:2,background:"linear-gradient(180deg,#F0A202,rgba(240,162,2,0.3))"}}/>
+        {icon&&<span style={{fontSize:18}}>{icon}</span>}
+        <h2 style={{fontSize:18,fontWeight:500,color:T.textPrimary,letterSpacing:"-0.01em",margin:0,lineHeight:1.2}}>{children}</h2>
+      </div>
+      {subtitle&&<div style={{fontSize:11,color:T.textSecondary,marginLeft:15,letterSpacing:"0.01em"}}>{subtitle}</div>}
+    </div>
+  );
+}
+
+// Input telefone com formatação automática (51) 99999-9999
+const InputTelefone = memo(function InputTelefone({initValue,onCommit}) {
+  const [val,setVal] = useState(initValue||"");
+  function fmt(raw) {
+    const d = String(raw||"").replace(/\D/g,"").slice(0,11);
+    if(!d) return "";
+    if(d.length<=2) return `(${d}`;
+    if(d.length<=6) return `(${d.slice(0,2)}) ${d.slice(2)}`;
+    if(d.length<=10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+    return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+  }
+  function handleChange(e) {
+    const formatted = fmt(e.target.value);
+    setVal(formatted);
+    onCommit(formatted);
+  }
+  return <input style={C.input} placeholder="(51) 99999-9999" value={val} onChange={handleChange} inputMode="tel"/>;
+});
+
+// Input idade OU data de nascimento — detecta automaticamente
+const InputIdadeOuNasc = memo(function InputIdadeOuNasc({initValue,onCommit}) {
+  const [val,setVal] = useState(initValue||"");
+  function fmt(raw) {
+    const d = String(raw||"").replace(/\D/g,"").slice(0,8);
+    if(!d) return "";
+    // Se tiver 1-3 dígitos, trata como idade
+    if(d.length<=3) {
+      const n = parseInt(d);
+      if(n<=120) return d;
+      return d.slice(0,2);
+    }
+    // 4+ dígitos → formata como data DD/MM/AAAA
+    if(d.length<=2) return d;
+    if(d.length<=4) return `${d.slice(0,2)}/${d.slice(2)}`;
+    return `${d.slice(0,2)}/${d.slice(2,4)}/${d.slice(4)}`;
+  }
+  function handleChange(e) {
+    const formatted = fmt(e.target.value);
+    setVal(formatted);
+    onCommit(formatted);
+  }
+  return <input style={C.input} placeholder="Idade ou DD/MM/AAAA" value={val} onChange={handleChange} inputMode="numeric"/>;
+});
+
+// Multi-select — checkboxes em grid com visual premium
+function MultiSelect({values,onChange,options,placeholder="Selecione"}) {
+  const [open,setOpen] = useState(false);
+  const ref = useRef(null);
+  const arr = Array.isArray(values)?values:[];
+  useEffect(()=>{
+    function click(e){if(ref.current&&!ref.current.contains(e.target))setOpen(false);}
+    document.addEventListener("mousedown",click);
+    return()=>document.removeEventListener("mousedown",click);
+  },[]);
+  function toggle(opt) {
+    if(arr.includes(opt)) onChange(arr.filter(x=>x!==opt));
+    else onChange([...arr,opt]);
+  }
+  const display = arr.length===0?placeholder:arr.length<=2?arr.join(", "):`${arr.length} selecionados`;
+  return (
+    <div ref={ref} style={{position:"relative"}}>
+      <div style={{...C.input,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",...noEdit}} onClick={()=>setOpen(o=>!o)}>
+        <span style={{color:arr.length>0?T.textPrimary:T.textMuted,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{display}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{transform:open?"rotate(180deg)":"none",transition:"transform 0.2s",flexShrink:0}}><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#111827",border:`0.5px solid ${T.border}`,borderRadius:10,zIndex:300,overflow:"hidden",boxShadow:"0 8px 24px rgba(0,0,0,0.5)",maxHeight:260,overflowY:"auto"}}>
+          {options.map(opt=>{
+            const sel = arr.includes(opt);
+            return (
+              <div key={opt} style={{padding:"11px 16px",fontSize:13,color:sel?"#F0A202":T.textSecondary,background:sel?"rgba(240,162,2,0.08)":"transparent",cursor:"pointer",display:"flex",alignItems:"center",gap:10,...noEdit}}
+                onMouseDown={e=>{e.preventDefault();toggle(opt);}}>
+                <div style={{width:14,height:14,borderRadius:4,border:`1px solid ${sel?"#F0A202":T.textMuted}`,background:sel?"rgba(240,162,2,0.18)":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {sel&&<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#F0A202" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                </div>
+                <span>{opt}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Pills de múltipla escolha inline (para rápida seleção — ex: estado civil, foco)
+function PillChoice({value,onChange,options}) {
+  return (
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      {options.map(opt=>{
+        const sel = value===opt;
+        return (
+          <button key={opt} type="button" onClick={()=>onChange(sel?"":opt)}
+            style={{
+              padding:"9px 14px",borderRadius:20,fontSize:12,
+              background:sel?"rgba(240,162,2,0.14)":"rgba(255,255,255,0.03)",
+              border:sel?"0.5px solid rgba(240,162,2,0.5)":`0.5px solid ${T.border}`,
+              color:sel?"#F0A202":T.textSecondary,
+              cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.01em",
+              transition:"all 0.18s",...noEdit,
+            }}>
+            {opt}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -386,14 +539,18 @@ export default function ClienteFicha() {
   const [modo,setModo] = useState(id==="novo"?"editar":"ver");
 
   const formRef = useRef({
-    nome:"",codigo:"",email:"",telefone:"",uf:"",
+    nome:"",codigo:"",email:"",telefone:"",uf:"",cidade:"",
     avatar:"homem",patrimonio:"",aporte:"",desde:"",
     nascimento:"",hobby:"",profissao:"",
-    feeBased:false,
+    hobbies:[],
+    estadoCivil:"",conjuge:"",temFilhos:"",filhos:[],
+    feeBased:false,modeloAtendimento:"",
     statusAporteMes:"",nextContactDate:"",notes:"",
     gastosMensaisManual:"",aporteRegistradoMes:"",
-    salarioMensal:"",metaAporteMensal:"",
+    salarioMensal:"",metaAporteMensal:"",aporteMedio:"",diaAporte:"",
+    rentabilidadeAnual:"",focoInvestimento:"",
     imoveis:[],veiculos:[],veiculoValor:"",
+    objetivosInteresse:[],
   });
   const savedDataRef = useRef({});
 
@@ -424,10 +581,13 @@ export default function ClienteFicha() {
       const s = await getDoc(doc(db,"clientes",id));
       if(!s.exists()){setCarregou(true);return;}
       const data={
-        avatar:"homem",feeBased:false,statusAporteMes:"",nextContactDate:"",notes:"",
+        avatar:"homem",feeBased:false,modeloAtendimento:"",statusAporteMes:"",nextContactDate:"",notes:"",
         gastosMensaisManual:"",aporteRegistradoMes:"",
-        salarioMensal:"",metaAporteMensal:"",
+        salarioMensal:"",metaAporteMensal:"",aporteMedio:"",diaAporte:"",
+        cidade:"",hobbies:[],estadoCivil:"",conjuge:"",temFilhos:"",filhos:[],
+        rentabilidadeAnual:"",focoInvestimento:"",
         imoveis:[],veiculos:[],veiculoValor:"",
+        objetivosInteresse:[],
         ...s.data()
       };
       formRef.current={...data};
@@ -557,11 +717,21 @@ export default function ClienteFicha() {
   function handleNaoAportou(){setFSnap("statusAporteMes","nao_aportou");setDataProximoContato(proximoDia1());setModalNaoAportou(true);}
   function confirmarNaoAportou(){setFSnap("nextContactDate",dataProximoContato);setModalNaoAportou(false);setDataProximoContato("");}
 
+  function adicionarFilho(){const n=[...(snap.filhos||[]),{nome:"",idade:""}];setFSnap("filhos",n);}
+  function removerFilho(i){const n=(snap.filhos||[]).filter((_,idx)=>idx!==i);setFSnap("filhos",n);}
+  function atualizarFilho(i,campo,valor){const n=(snap.filhos||[]).map((f,idx)=>idx===i?{...f,[campo]:valor}:f);setFSnap("filhos",n);}
+
+  function toggleObjetivoInteresse(id){
+    const arr = snap.objetivosInteresse||[];
+    const novo = arr.includes(id) ? arr.filter(x=>x!==id) : [...arr,id];
+    setFSnap("objetivosInteresse",novo);
+  }
+
   function adicionarImovel(){const n=[...(snap.imoveis||[]),{tipo:"Casa",nome:"",quantidade:1,faixa:"R$ 500.000,00"}];setFSnap("imoveis",n);}
   function removerImovel(i){const n=(snap.imoveis||[]).filter((_,idx)=>idx!==i);setFSnap("imoveis",n);}
   function atualizarImovel(i,campo,valor){const n=(snap.imoveis||[]).map((im,idx)=>idx===i?{...im,[campo]:valor}:im);setFSnap("imoveis",n);}
 
-  function adicionarVeiculo(){const n=[...(snap.veiculos||[]),{tipo:"Carro",nome:"",quantidade:1,faixa:"R$ 50.000,00"}];setFSnap("veiculos",n);}
+  function adicionarVeiculo(){const n=[...(snap.veiculos||[]),{tipo:"Carro",modelo:"",quantidade:1,faixa:"R$ 50.000,00",temSeguro:false,valorSeguro:""}];setFSnap("veiculos",n);}
   function removerVeiculo(i){const n=(snap.veiculos||[]).filter((_,idx)=>idx!==i);setFSnap("veiculos",n);}
   function atualizarVeiculo(i,campo,valor){const n=(snap.veiculos||[]).map((v,idx)=>idx===i?{...v,[campo]:valor}:v);setFSnap("veiculos",n);}
 
