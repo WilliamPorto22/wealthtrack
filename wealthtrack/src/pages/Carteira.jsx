@@ -80,6 +80,15 @@ const GRUPOS = [
       { key: "global",         label: "Invest. Globais (Geral)",      cor: "#a855f7", liq: "D+2", legado: true },
     ],
   },
+  {
+    key: "outros",
+    label: "Outros / Não Classificado",
+    icon: "📦",
+    cor: "#94a3b8",
+    classes: [
+      { key: "outros", label: "Outros / Não Classificado", cor: "#94a3b8", liq: "—" },
+    ],
+  },
 ];
 const CLASSES = GRUPOS.flatMap((g) => g.classes);
 const classByKey = Object.fromEntries(CLASSES.map((c) => [c.key, c]));
@@ -339,12 +348,14 @@ export default function Carteira() {
       ativos[idx] = { ...ativos[idx], ...dadosNovos };
     }
     setFSnap(classKey + "Ativos", ativos);
+    setIsEditing(true);
   }
 
   function removeAtivo(classKey, idx) {
     const ativos = [...(snap[classKey + "Ativos"] || [])];
     ativos.splice(idx, 1);
     setFSnap(classKey + "Ativos", ativos);
+    setIsEditing(true);
   }
 
   // move ativo entre classes (preserva id/dados) — usa formRef (sync) pra evitar race
@@ -364,6 +375,7 @@ export default function Carteira() {
     };
     formRef.current = novo;
     setSnap(novo);
+    setIsEditing(true);
   }
 
   // ─── Cálculos agregados ─────────────────────────────────────
@@ -558,6 +570,7 @@ export default function Carteira() {
         Object.entries(carteiraFields).forEach(([k, v]) => { novoForm[k] = v; });
         formRef.current = novoForm;
         setSnap(novoForm);
+        setIsEditing(true);
         if (metaFields._tipo === "relatorio") {
           setXpSummary(metaFields);
           setP(100, `✓ Relatório importado: ${camposPreenchidos} classe${camposPreenchidos > 1 ? "s" : ""} preenchida${camposPreenchidos > 1 ? "s" : ""}. Revise e salve.`);
@@ -588,7 +601,9 @@ export default function Carteira() {
         actionButtons={[
           { icon: "↑", label: "Importar PDF/Imagem", onClick: () => fileInputRef.current?.click(), disabled: !!uploadProgress && !uploadProgress.error && uploadProgress.pct < 100 },
           { icon: "＋", label: "Aporte", variant: "secondary", onClick: () => setAporteModal(true) },
-          { icon: "💾", label: salvando ? "Salvando..." : "Salvar", variant: "primary", onClick: salvar, disabled: salvando },
+          isEditing
+            ? { icon: "💾", label: salvando ? "Salvando..." : "Salvar", variant: "primary", onClick: salvar, disabled: salvando }
+            : { icon: "✎", label: "Editar", variant: "primary", onClick: () => setIsEditing(true) },
         ]}
       />
       <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" style={{ display: "none" }} onChange={handleUpload} />
@@ -1074,7 +1089,7 @@ export default function Carteira() {
         {/* ── AÇÃO FINAL ── */}
         <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
           <button
-            onClick={salvar}
+            onClick={isEditing ? salvar : () => setIsEditing(true)}
             disabled={salvando}
             style={{
               flex: 1,
@@ -1091,12 +1106,14 @@ export default function Carteira() {
               fontWeight: 500,
             }}
           >
-            {salvando ? "Salvando..." : "💾 Salvar & Sincronizar"}
+            {salvando ? "Salvando..." : isEditing ? "💾 Salvar & Sincronizar" : "✎ Editar Carteira"}
           </button>
         </div>
 
         <div style={{ fontSize: 10, color: T.textMuted, textAlign: "center", marginTop: 18, ...noSel }}>
-          Os valores são propagados automaticamente para Dashboard, Objetivos e Ficha do Cliente ao salvar.
+          {isEditing
+            ? "Os valores são propagados automaticamente para Dashboard, Objetivos e Ficha do Cliente ao salvar."
+            : "Clique em Editar para modificar a carteira. Alterações são propagadas ao salvar."}
         </div>
       </div>
     </div>

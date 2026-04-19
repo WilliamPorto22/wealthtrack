@@ -793,6 +793,146 @@ function _parseCarteiraGenerico(text) {
   return res;
 }
 
+// ── Parser de ativos individuais (screenshots de app mobile) ───
+// Fallback final: se nada estruturado foi identificado, varre o texto
+// procurando padrão "NOME ... R$ VALOR ... %rent" e classifica cada ativo.
+// Ativos que não casam com nenhuma classe conhecida vão para "outros".
+function classifyAtivo(name, contextBefore) {
+  const nUp = norm(name);
+  const ctx = norm(contextBefore || "");
+  // 1) Pelo nome do ativo
+  for (const [key, pats] of Object.entries(CART_PATTERNS)) {
+    for (const p of pats) if (p.test(nUp)) return key;
+  }
+  // 2) Ticker B3: XXXX11 = FII, XXXX3/4 = ações
+  if (/\b[A-Z]{4}11\b/.test(nUp)) return "fiis";
+  if (/\b[A-Z]{4}[34]\b/.test(nUp)) return "acoes";
+  // 3) Pelo contexto nas linhas anteriores (cabeçalho "Ações", "Renda Fixa", etc.)
+  if (/\bA.OES|RENDA\s+VARI.VEL|BOLSA\b/.test(ctx)) return "acoes";
+  if (/\bFII\b|FUNDO\s+IMOBILI|FUNDOS\s+LISTADOS|ALTERNATIVO/.test(ctx)) return "fiis";
+  if (/IPCA|INFLACAO|INFLA.{0,3}O\b|NTN.?B/.test(ctx)) return "ipca";
+  if (/\bPRE.FIXAD|NTN.?F|LTN\b/.test(ctx)) return "preFixado";
+  if (/POS.FIXAD|\bCDB\b|\bLCI\b|\bLCA\b|\bCDI\b|TESOURO\s+SELIC|RENDA\s+FIXA/.test(ctx)) return "posFixado";
+  if (/MULTIMERCADO|HEDGE/.test(ctx)) return "multi";
+  if (/\bVGBL\b/.test(ctx)) return "prevVGBL";
+  if (/\bPGBL\b/.test(ctx)) return "prevPGBL";
+  if (/GLOBAL|INTERNACIONAL|EXTERIOR|D.LAR|\bUSD\b/.test(ctx)) return "global";
+  return "outros";
+}
+
+function _parseAtivosGenerico(text) {
+  const result = {};
+  // Normaliza quebras e remove caracteres OCR lixo comuns
+  const clean = text.replace(/\r/g, "").replace(/[«»"·¬]/g, "");
+  const rawLines = clean.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  if (rawLines.length === 0) return result;
+
+  // Regex que casa qualquer "R$ X,XX" com tolerância a artefatos OCR
+  // (RS, R S, espaços extras antes do dígito)
+  const VAL_RE = /R\s*[\$S5]\s*([\d]{1,3}(?:\.\d{3})*,\d{2})/;
+  // Labels fortes que indicam o valor do ativo
+  const VALOR_LABEL_RE = /(?:saldo\s+bruto|saldo\s+atual|saldo\s+l[ií]quido|valor(?:\s+investido)?|aplicado|posi[çc][ãa]o|total\s+investido|patrim[oôó]nio|valor\s+bruto)/i;
+  // Lixo que nunca pode ser nome
+  const NAO_NOME_RE = /^(?:saldo|rent\.?|rentabilidade|resgate|mais\s+detalhes|comprar|vender|rendeu|nenhum|aplica[çc][ãa]o|total|vencimento|data|categoria|objetivo|classe|segmento|movimenta|dividendo|tesouro\s+direto)\b/i;
+  // Cabeçalhos/seções de classe (não são ativo, mas são contexto)
+  const SECAO_RE = /^(?:a[çc][õo]es?|renda\s+fixa(?:\s+[\wçãéíóú+-]+)?|fundos?\s+imobili[áa]rios?|fii[s]?|multimercado|previd[êe]ncia|vgbl|pgbl|invest[\s.]*globais?|internacional|exterior|tesouro\s+direto|bolsa|etf[s]?)\s*$/i;
+
+  // Pré-filtra linhas válidas e marca as com R$ como "âncoras"
+  const lines = rawLines.map(l => ({ t: l, hasVal: VAL_RE.test(l), isSec: SECAO_RE.test(l) }));
+
+  const seen = new Set();
+  let secaoCtx = ""; // último cabeçalho de seção encontrado
+
+  for (let i = 0; i < lines.length; i++) {
+    const { t, hasVal, isSec } = lines[i];
+    if (isSec) { secaoCtx = t; continue; }
+    if (!hasVal) continue;
+
+    // Só aceita valor se estiver rotulado OU for a única linha de valor do "bloco"
+    const m = t.match(VAL_RE);
+    if (!m) continue;
+    const valor = parseBRL(m[1]);
+    if (valor < 100) continue;
+    // Prefere linhas com label conhecido; se não tem label e não é valor "isolado",
+    // só aceita se a linha começa com R$ (ex: "R$ 712,80")
+    const hasLabel = VALOR_LABEL_RE.test(t);
+    const isStandalone = /^R?\s*[\$S5]?\s*[\d]{1,3}(?:\.\d{3})*,\d{2}\s*$/.test(t);
+    if (!hasLabel && !isStandalone) continue;
+    // Se tem label "saldo líquido" e logo antes já vimos "saldo bruto" com mesmo bloco, pula (evita duplicar)
+    // Detecta isso checando se alguma linha anterior (até 4) tem label bruto/atual
+    if (/saldo\s+l[ií]quido/i.test(t)) {
+      let temBruto = false;
+      for (let k = Math.max(0, i - 4); k < i; k++) {
+        if (/saldo\s+(?:bruto|atual)/i.test(lines[k].t)) { temBruto = true; break; }
+      }
+      if (temBruto) continue;
+    }
+
+    // Busca o nome: percorre para trás até achar uma linha "substantiva"
+    let nome = null;
+    let contextoAnterior = [];
+    for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+      const { t: lj, hasVal: hv, isSec: sec } = lines[j];
+      contextoAnterior.push(lj);
+      if (hv) continue;
+      if (sec) { if (!secaoCtx) secaoCtx = lj; continue; }
+      if (NAO_NOME_RE.test(lj)) continue;
+      if (/^[(\d↑↓+\-*]/.test(lj)) continue;
+      if (lj.length < 3 || lj.length > 120) continue;
+      // linha do tipo "D+0", "%"
+      if (/^\s*[\d,.-]+\s*%?\s*$/.test(lj)) continue;
+      nome = lj;
+      break;
+    }
+    if (!nome) continue;
+
+    // Limpa sufixos "- Renda Fixa" do nome (mantém ticker se houver)
+    const nomeLimpo = nome.replace(/\s+[-–]\s+(renda\s+fixa|a[çc][õo]es|fii|fundo.*|multimercado).*/i, "").trim();
+
+    // Rentabilidade: busca "X,XX%" ou "rent. mês X,XX%" nas próximas 6 linhas
+    let rentMes = "";
+    let rentAno = "";
+    for (let j = i; j < Math.min(lines.length, i + 6); j++) {
+      const lj = lines[j].t;
+      const rm = lj.match(/rent(?:abilidade|\.)?\s*(?:no\s+)?m[êe]s(?:\s+atual)?\s*:?\s*(-?[\d,]+)\s*%/i);
+      if (rm && !rentMes) rentMes = rm[1].replace(",", ".");
+      const ra = lj.match(/rent(?:abilidade|\.)?\s*(?:no\s+)?ano\s*:?\s*(-?[\d,]+)\s*%/i);
+      if (ra && !rentAno) rentAno = ra[1].replace(",", ".");
+      // "rendeu ↑ R$ X (Y,YY%)" → interpreta como rent do período (coloca em rentMes se vazio)
+      const rd = lj.match(/rendeu.*?\(\s*(-?[\d,]+)\s*%\s*\)/i);
+      if (rd && !rentMes) rentMes = rd[1].replace(",", ".");
+    }
+
+    const dedupeKey = nomeLimpo.toUpperCase() + "|" + valor;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    const classKey = classifyAtivo(nomeLimpo, contextoAnterior.join(" ") + " " + secaoCtx);
+    const ativosKey = classKey + "Ativos";
+    if (!result[ativosKey]) result[ativosKey] = [];
+    result[ativosKey].push({
+      id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+      nome: nomeLimpo,
+      valor: String(valor),
+      rentMes,
+      rentAno,
+      vencimento: "",
+      objetivo: "",
+      segmento: "",
+    });
+  }
+
+  // Sincroniza totais por classe (soma dos valores dos ativos)
+  for (const key of Object.keys(result)) {
+    if (!key.endsWith("Ativos")) continue;
+    const classKey = key.replace(/Ativos$/, "");
+    const tot = result[key].reduce((acc, a) => acc + parseInt(a.valor || "0"), 0);
+    if (tot > 0) result[classKey] = String(tot);
+  }
+
+  return result;
+}
+
 const FLUXO_PATTERNS = {
   renda:       [/SALARIO|SAL.RIO/i,/PROL.BORE/i,/HONOR.RIOS/i,/REMUNERA/i,/DIVIDENDOS/i,/RECEITA\b/i],
   moradia:     [/ALUGUEL/i,/CONDOMINIO|CONDOM.NIO/i,/IPTU/i,/.GUA\b/i,/ENERGIA\s+EL.TRICA/i,/INTERNET\b/i],
@@ -828,13 +968,36 @@ export function parseCarteiraFromText(text) {
   if (tipo === "relatorio") {
     const res = parseRelatorio(text);
     const classes = Object.keys(res).filter(k => !k.startsWith("_") && k !== "rentabilidade" && !k.endsWith("Ativos"));
-    if (classes.length === 0) {
-      console.log("[WealthTrack] Sem classes no parseRelatorio, usando genérico");
-      return _parseCarteiraGenerico(text);
-    }
-    return res;
+    if (classes.length > 0) return res;
+    console.log("[WealthTrack] Sem classes no parseRelatorio, tentando ativos individuais");
   }
-  return _parseCarteiraGenerico(text);
+  // Fallback 1: parser de ativos individuais (screenshots de app mobile)
+  const ativosRes = _parseAtivosGenerico(text);
+  const classesAtivos = Object.keys(ativosRes).filter(k => !k.endsWith("Ativos") && !k.startsWith("_"));
+  if (classesAtivos.length > 0) {
+    console.log("[WealthTrack] parseAtivosGenerico encontrou:", classesAtivos);
+    return ativosRes;
+  }
+  // Fallback 2: parser genérico por palavras-chave
+  const genericoRes = _parseCarteiraGenerico(text);
+  if (Object.keys(genericoRes).length > 0) return genericoRes;
+  // Fallback 3: pegou pelo menos algum R$ no texto? cria um ativo em "outros"
+  const valM = text.match(/R\s*[\$S5]\s*([\d]{1,3}(?:\.\d{3})*,\d{2})/);
+  if (valM) {
+    const valor = parseBRL(valM[1]);
+    if (valor >= 100) {
+      return {
+        outros: String(valor),
+        outrosAtivos: [{
+          id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+          nome: "Ativo importado (revisar nome)",
+          valor: String(valor),
+          rentMes: "", rentAno: "", vencimento: "", objetivo: "", segmento: "",
+        }],
+      };
+    }
+  }
+  return {};
 }
 
 export function parseFluxoFromText(text) {

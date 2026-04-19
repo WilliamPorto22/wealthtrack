@@ -188,9 +188,32 @@ export default function ObjetivoDetalhes() {
   const pctAtingido = Math.min(100, meta > 0 ? (inicial / meta) * 100 : 0);
 
   const historico = objetivo?.historicoAcompanhamento || [];
-  const rentabilidadeMediaHistorico = historico.length > 0
-    ? historico.reduce((s, h) => s + (h.rentabilidadeCarteira || 0), 0) / historico.length
+
+  // Rentabilidade da carteira (anual → mensal)
+  const rentCarteiraAnual = parseFloat(
+    cliente?.carteira?.rentabilidadeCalculada || cliente?.carteira?.rentabilidade || "0"
+  ) || null;
+  const rentCarteiraMensal = rentCarteiraAnual !== null && rentCarteiraAnual !== 0
+    ? (Math.pow(1 + rentCarteiraAnual / 100, 1 / 12) - 1) * 100
     : null;
+
+  // Média do histórico de acompanhamento (últimos 12 meses)
+  const hoje = new Date();
+  const doze = new Date(hoje.getFullYear(), hoje.getMonth() - 11, 1);
+  const historico12 = historico.filter(h => {
+    if (!h.mesAno) return false;
+    const [mm, yyyy] = h.mesAno.split("/");
+    return new Date(parseInt(yyyy), parseInt(mm) - 1, 1) >= doze;
+  });
+  const rentabilidadeMediaHistorico = historico12.length > 0
+    ? historico12.reduce((s, h) => s + (h.rentabilidadeCarteira || 0), 0) / historico12.length
+    : historico.length > 0
+      ? historico.reduce((s, h) => s + (h.rentabilidadeCarteira || 0), 0) / historico.length
+      : null;
+
+  // Fonte preferida: carteira (se existir), senão historico acompanhamento
+  const rentRealizadaFinal = rentCarteiraMensal ?? rentabilidadeMediaHistorico;
+  const rentRealizadaFonte = rentCarteiraMensal !== null ? "carteira" : rentabilidadeMediaHistorico !== null ? "historico" : null;
 
   async function salvarVinculoAtivos(novaSelecao) {
     setSalvandoAtivos(true);
@@ -436,7 +459,7 @@ export default function ObjetivoDetalhes() {
   const Resumo = () => {
     const jMensal = Math.pow(1 + TAXA_ANUAL / 100, 1 / 12) - 1;
     const rentMetaMensal = parseFloat((jMensal * 100).toFixed(2));
-    const rentRealizada = rentabilidadeMediaHistorico;
+    const rentRealizada = rentRealizadaFinal;
     const diferencaRent = rentRealizada !== null ? rentRealizada - rentMetaMensal : null;
 
     const infoPorTipo = {
@@ -597,7 +620,7 @@ export default function ObjetivoDetalhes() {
           gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))",
           gap: 16,
         }}>
-          <div>
+          <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
               Meta de Rentabilidade
             </div>
@@ -609,9 +632,9 @@ export default function ObjetivoDetalhes() {
             </div>
           </div>
 
-          <div>
+          <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
-              Rent. Realizada (média)
+              Rent. Realizada (carteira)
             </div>
             <div style={{
               fontSize: 18,
@@ -623,11 +646,11 @@ export default function ObjetivoDetalhes() {
               {rentRealizada !== null ? `${rentRealizada.toFixed(2)}% a.m.` : "—"}
             </div>
             <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>
-              {rentRealizada !== null ? "Baseado no acompanhamento" : "Registre no Acompanhamento"}
+              {rentRealizadaFonte === "carteira" ? "Média da carteira (a.m.)" : rentRealizadaFonte === "historico" ? "Média do acompanhamento" : "Sem dados na carteira"}
             </div>
           </div>
 
-          <div>
+          <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
               Diferença
             </div>
@@ -645,7 +668,7 @@ export default function ObjetivoDetalhes() {
             )}
           </div>
 
-          <div>
+          <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 500 }}>
               IPCA Atual
             </div>
@@ -662,30 +685,30 @@ export default function ObjetivoDetalhes() {
         </div>
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))",
-          gap: 10,
+          gridTemplateColumns: "repeat(4, 1fr)",
+          gap: 12,
           marginBottom: 28,
         }}>
           {[
-            ["Patrimônio Necessário", brl(meta)],
-            ["Patrimônio Atual", brl(inicial)],
-            ["Aporte Mensal", brl(aporte)],
-            ["Prazo Desejado", `${prazo} ${prazo === 1 ? "ano" : "anos"}`],
-            ["Prazo Necessário", anosNec ? `${anosNec} anos` : "50+ anos"],
-            ["Meta de Rentabilidade", `${TAXA_ANUAL}% a.a.`],
-            ["IPCA", `${ipca.toFixed(2)}% a.a.`],
-            ["Renda Mensal ao Final", projecao.length > 0 ? brl(projecao[projecao.length - 1]?.rendaMensalReal) : "—"],
-          ].map(([label, valor], i) => (
+            { label: "Patrimônio Necessário", valor: brl(meta), destaque: false },
+            { label: "Patrimônio Atual", valor: brl(inicial), destaque: false },
+            { label: "Aporte Mensal", valor: brl(aporte), destaque: false },
+            { label: "Prazo Desejado", valor: `${prazo} ${prazo === 1 ? "ano" : "anos"}`, destaque: false },
+            { label: "Prazo Necessário", valor: anosNec ? `${anosNec} anos` : "50+ anos", destaque: true, cor: cor },
+            { label: "Meta de Rentabilidade", valor: `${TAXA_ANUAL}% a.a.`, destaque: false },
+            { label: "IPCA Atual", valor: `${ipca.toFixed(2)}% a.a.`, destaque: false },
+            { label: "Renda Mensal ao Final", valor: projecao.length > 0 ? brl(projecao[projecao.length - 1]?.rendaMensalReal) : "—", destaque: false },
+          ].map(({ label, valor, destaque, cor: corCard }, i) => (
             <div key={i} style={{
-              background: "rgba(255,255,255,0.02)",
-              border: `0.5px solid ${T.border}`,
+              background: destaque ? `${corCard}10` : "rgba(255,255,255,0.025)",
+              border: `0.5px solid ${destaque ? corCard + "40" : T.border}`,
               borderRadius: T.radiusMd,
-              padding: "12px 14px",
+              padding: "16px 18px",
             }}>
-              <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 6, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              <div style={{ fontSize: 9, color: destaque ? corCard : T.textMuted, marginBottom: 8, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 500 }}>
                 {label}
               </div>
-              <div style={{ fontSize: 14, color: T.textPrimary, fontWeight: 500 }}>
+              <div style={{ fontSize: 16, color: destaque ? corCard : T.textPrimary, fontWeight: 600, lineHeight: 1.2 }}>
                 {valor}
               </div>
             </div>
@@ -1196,12 +1219,15 @@ export default function ObjetivoDetalhes() {
         const aOk = (dadoHist.aporteRealizado || 0) >= aporte;
         const rOk = (dadoHist.rentabilidadeCarteira || 0) >= metaRentPct;
         statusMes = aOk && rOk ? "meta_batida" : aOk || rOk ? "meta_parcial" : "nao_bateu";
+      } else if (isAtual && rentCarteiraMensal !== null) {
+        statusMes = rentCarteiraMensal >= metaRentPct ? "meta_batida" : "nao_bateu";
       }
+      const rentRealLinha = dadoHist?.rentabilidadeCarteira ?? (isAtual && rentCarteiraMensal !== null ? rentCarteiraMensal : null);
       linhas.push({
         mesAnoKey, mesLabel, isAtual, isFuturo, patrimonioAlvo,
         valorCarteira: dadoHist?.valorCarteira ?? (isAtual ? inicial : null),
         aporteRealizado: dadoHist?.aporteRealizado ?? null,
-        rentReal: dadoHist?.rentabilidadeCarteira ?? null,
+        rentReal: rentRealLinha,
         statusMes, temDados: !!dadoHist,
       });
     }
@@ -1212,14 +1238,16 @@ export default function ObjetivoDetalhes() {
     function PillStatus({ s }) {
       if (!s) return <span style={{ color: T.textMuted, fontSize: 10 }}>—</span>;
       const map = {
-        meta_batida: ["Meta Batida", "#22c55e", "rgba(34,197,94,0.12)"],
-        meta_parcial: ["Meta Parcial", "#f59e0b", "rgba(245,158,11,0.12)"],
-        nao_bateu: ["Não Bateu", "#ef4444", "rgba(239,68,68,0.12)"],
+        meta_batida: { icon: "✓", label: "Meta Batida", cor: "#22c55e", bg: "rgba(34,197,94,0.13)", border: "rgba(34,197,94,0.3)" },
+        meta_parcial: { icon: "◐", label: "Parcial", cor: "#f59e0b", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.28)" },
+        nao_bateu: { icon: "✕", label: "Não Bateu", cor: "#ef4444", bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.28)" },
       };
-      const [label, cor, bg] = map[s] || ["—", T.textMuted, "transparent"];
+      const info = map[s];
+      if (!info) return <span style={{ color: T.textMuted, fontSize: 10 }}>—</span>;
       return (
-        <span style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: bg, color: cor, fontWeight: 600, whiteSpace: "nowrap" }}>
-          {label}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, padding: "3px 10px 3px 6px", borderRadius: 20, background: info.bg, color: info.cor, fontWeight: 600, border: `0.5px solid ${info.border}`, whiteSpace: "nowrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", background: info.cor, color: "#fff", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{info.icon}</span>
+          {info.label}
         </span>
       );
     }
