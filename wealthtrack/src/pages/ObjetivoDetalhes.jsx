@@ -97,6 +97,7 @@ export default function ObjetivoDetalhes() {
   const [modalAtivos, setModalAtivos] = useState(false);
   const [selecaoAtivos, setSelecaoAtivos] = useState(new Set());
   const [salvandoAtivos, setSalvandoAtivos] = useState(false);
+  const [confirmTransferAtivo, setConfirmTransferAtivo] = useState(null);
 
   async function carregarCliente() {
     try {
@@ -161,7 +162,12 @@ export default function ObjetivoDetalhes() {
     );
   }
 
-  const inicial = parseCentavos(objetivo.patrimAtual) / 100;
+  const carteiraPrincipal = cliente?.carteira || {};
+  const ativosVinculadosHeader = ativosDoObjetivo(carteiraPrincipal, objetivo.tipo);
+  const totalVinculadoHeader = ativosVinculadosHeader.reduce((s, a) => s + (a.valorReais || 0), 0);
+  const inicial = objetivo.patrimSource === "ativos" && totalVinculadoHeader > 0
+    ? totalVinculadoHeader
+    : parseCentavos(objetivo.patrimAtual) / 100;
   const aporte = parseCentavos(objetivo.aporte) / 100;
   const meta = parseCentavos(objetivo.meta) / 100;
   const prazo = parseInt(objetivo.prazo) || 0;
@@ -1704,6 +1710,7 @@ export default function ObjetivoDetalhes() {
   };
 
   // ── MODAL: vincular ativos ──
+  // NOTE: chamado como função {ModalVincularAtivos()} para evitar unmount/remount ao mudar seleção
   const ModalVincularAtivos = () => {
     if (!modalAtivos) return null;
     const carteira = cliente?.carteira || {};
@@ -1721,6 +1728,89 @@ export default function ObjetivoDetalhes() {
       setSelecaoAtivos(n);
     }
 
+    const todosSelecionados = todos.length > 0 && todos.every(a => selecaoAtivos.has(`${a.classeKey}::${a.id}`));
+
+    function selecionarTodos() {
+      setSelecaoAtivos(new Set(todos.map(a => `${a.classeKey}::${a.id}`)));
+    }
+    function desmarcarTodos() {
+      setSelecaoAtivos(new Set());
+    }
+
+    // Seções
+    const livres = todos.filter(a => !a.objetivo);
+    const desteMesmo = todos.filter(a => a.objetivo === labelAtivo);
+    const outroObjetivo = todos.filter(a => a.objetivo && a.objetivo !== labelAtivo);
+
+    const renderAtivo = (a, isOutro = false) => {
+      const k = `${a.classeKey}::${a.id}`;
+      const marcado = selecaoAtivos.has(k);
+      return (
+        <div
+          key={k}
+          onClick={() => {
+            if (isOutro && !marcado) {
+              setConfirmTransferAtivo(a);
+            } else {
+              toggle(a);
+            }
+          }}
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "10px 12px",
+            background: marcado ? "rgba(240,162,2,0.08)" : "rgba(255,255,255,0.02)",
+            border: marcado ? `0.5px solid ${T.goldBorder}` : `0.5px solid ${T.border}`,
+            borderRadius: T.radiusSm,
+            cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+        >
+          <div style={{
+            width: 16, height: 16, borderRadius: 4,
+            background: marcado ? T.gold : "transparent",
+            border: marcado ? `1px solid ${T.gold}` : `1px solid ${T.textMuted}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0, color: T.bg, fontSize: 11, fontWeight: 700,
+          }}>
+            {marcado ? "✓" : ""}
+          </div>
+          <div style={{ width: 4, height: 22, borderRadius: 2, background: a.classeCor, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: T.textPrimary, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {a.nome || "Ativo sem nome"}
+            </div>
+            <div style={{ fontSize: 10, color: T.textMuted }}>
+              {a.classeLabel}
+            </div>
+          </div>
+          {isOutro && !marcado ? (
+            <div style={{
+              fontSize: 10, color: "#f59e0b", fontWeight: 600, flexShrink: 0,
+              border: "0.5px solid rgba(245,158,11,0.4)", borderRadius: 4,
+              padding: "3px 8px", letterSpacing: "0.04em", whiteSpace: "nowrap",
+            }}>
+              Editar objetivo
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: marcado ? T.gold : T.textSecondary, fontWeight: 600, flexShrink: 0, whiteSpace: "nowrap" }}>
+              {brl(a.valorReais)}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const Secao = ({ titulo, cor, ativos, isOutro }) => ativos.length === 0 ? null : (
+      <div>
+        <div style={{ fontSize: 9, color: cor, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 8, fontWeight: 600 }}>
+          {titulo} ({ativos.length})
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {ativos.map(a => renderAtivo(a, isOutro))}
+        </div>
+      </div>
+    );
+
     return (
       <div style={{
         position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 620,
@@ -1732,79 +1822,56 @@ export default function ObjetivoDetalhes() {
           onClick={e => e.stopPropagation()}
           style={{
             background: T.bgCard, border: `0.5px solid ${T.border}`, borderRadius: T.radiusLg,
-            width: 560, maxWidth: "100%", maxHeight: "86vh",
+            width: 580, maxWidth: "100%", maxHeight: "86vh",
             display: "flex", flexDirection: "column",
           }}
         >
-          <div style={{ padding: "18px 22px", borderBottom: `0.5px solid ${T.border}` }}>
+          {/* Header */}
+          <div style={{ padding: "18px 22px", borderBottom: `0.5px solid ${T.border}`, flexShrink: 0 }}>
             <div style={{ fontSize: 10, color: T.gold, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>
               Vincular ativos
             </div>
-            <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 500, marginBottom: 4 }}>
+            <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 500, marginBottom: 6 }}>
               {objetivo.nomeCustom || objetivo.label}
             </div>
-            <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.6 }}>
-              Selecione os ativos da carteira que compõem o patrimônio deste objetivo.
-              Serão marcados com o rótulo "{labelAtivo}".
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ fontSize: 11, color: T.textSecondary }}>
+                Selecione os ativos que compõem este objetivo.
+              </div>
+              {todos.length > 0 && (
+                <button
+                  onClick={todosSelecionados ? desmarcarTodos : selecionarTodos}
+                  style={{
+                    padding: "5px 12px", fontSize: 10, cursor: "pointer",
+                    background: "rgba(255,255,255,0.05)", border: `0.5px solid ${T.border}`,
+                    borderRadius: T.radiusSm, color: T.textSecondary, fontFamily: T.fontFamily,
+                    letterSpacing: "0.06em", whiteSpace: "nowrap",
+                  }}
+                >
+                  {todosSelecionados ? "Desmarcar todos" : "Selecionar todos"}
+                </button>
+              )}
             </div>
           </div>
 
-          <div style={{ padding: "14px 22px", overflowY: "auto", flex: 1 }}>
+          {/* Lista com scroll */}
+          <div style={{ padding: "14px 22px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 18 }}>
             {todos.length === 0 ? (
               <div style={{ textAlign: "center", padding: "32px 20px", fontSize: 12, color: T.textMuted, lineHeight: 1.7 }}>
                 Nenhum ativo cadastrado na carteira.<br />
                 Vá em "Carteira" e cadastre seus investimentos primeiro.
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {todos.map(a => {
-                  const k = `${a.classeKey}::${a.id}`;
-                  const marcado = selecaoAtivos.has(k);
-                  const jaTemOutro = a.objetivo && a.objetivo !== labelAtivo;
-                  return (
-                    <div
-                      key={k}
-                      onClick={() => toggle(a)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "10px 12px",
-                        background: marcado ? "rgba(240,162,2,0.08)" : "rgba(255,255,255,0.02)",
-                        border: marcado ? `0.5px solid ${T.goldBorder}` : `0.5px solid ${T.border}`,
-                        borderRadius: T.radiusSm,
-                        cursor: "pointer",
-                        transition: "all 0.15s",
-                      }}
-                    >
-                      <div style={{
-                        width: 16, height: 16, borderRadius: 4,
-                        background: marcado ? T.gold : "transparent",
-                        border: marcado ? `1px solid ${T.gold}` : `1px solid ${T.textMuted}`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        flexShrink: 0, color: T.bg, fontSize: 11, fontWeight: 700,
-                      }}>
-                        {marcado ? "✓" : ""}
-                      </div>
-                      <div style={{ width: 4, height: 22, borderRadius: 2, background: a.classeCor, flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, color: T.textPrimary, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {a.nome || "Ativo sem nome"}
-                        </div>
-                        <div style={{ fontSize: 10, color: T.textMuted, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <span>{a.classeLabel}</span>
-                          {jaTemOutro && <span style={{ color: T.warning }}>· vinculado a "{a.objetivo}"</span>}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 13, color: marcado ? T.gold : T.textSecondary, fontWeight: 600, flexShrink: 0 }}>
-                        {brl(a.valorReais)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                <Secao titulo="Sem objetivo vinculado" cor={T.textMuted} ativos={livres} isOutro={false} />
+                <Secao titulo="Vinculados a este objetivo" cor={T.gold} ativos={desteMesmo} isOutro={false} />
+                <Secao titulo="Vinculados a outro objetivo" cor="#f59e0b" ativos={outroObjetivo} isOutro={true} />
+              </>
             )}
           </div>
 
-          <div style={{ padding: "14px 22px", borderTop: `0.5px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          {/* Footer */}
+          <div style={{ padding: "14px 22px", borderTop: `0.5px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexShrink: 0 }}>
             <div>
               <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
                 {selecaoAtivos.size} {selecaoAtivos.size === 1 ? "ativo" : "ativos"} · total
@@ -1829,6 +1896,47 @@ export default function ObjetivoDetalhes() {
             </div>
           </div>
         </div>
+
+        {/* Confirmação: transferir ativo de outro objetivo */}
+        {confirmTransferAtivo && (
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 630, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+            onClick={() => setConfirmTransferAtivo(null)}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: T.bgCard, border: `0.5px solid ${T.border}`, borderRadius: T.radiusLg,
+                width: 420, maxWidth: "100%", padding: "24px 24px 20px",
+              }}
+            >
+              <div style={{ fontSize: 14, color: T.textPrimary, fontWeight: 600, marginBottom: 12 }}>
+                Alterar objetivo deste ativo?
+              </div>
+              <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.8, marginBottom: 20 }}>
+                <strong style={{ color: T.textPrimary }}>{confirmTransferAtivo.nome || "Ativo sem nome"}</strong><br />
+                Atualmente vinculado a{" "}
+                <strong style={{ color: "#f59e0b" }}>"{confirmTransferAtivo.objetivo}"</strong>.<br />
+                Deseja transferir para{" "}
+                <strong style={{ color: T.gold }}>"{TIPO_OBJETIVO_PARA_LABEL[objetivo.tipo]}"</strong>?
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button
+                  onClick={() => setConfirmTransferAtivo(null)}
+                  style={{ padding: "9px 16px", background: "none", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, color: T.textSecondary, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.06em" }}
+                >
+                  Não
+                </button>
+                <button
+                  onClick={() => { toggle(confirmTransferAtivo); setConfirmTransferAtivo(null); }}
+                  style={{ padding: "9px 18px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusMd, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, fontWeight: 600, letterSpacing: "0.06em" }}
+                >
+                  Sim, transferir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1892,7 +2000,7 @@ export default function ObjetivoDetalhes() {
           {abaAtiva === "ativos" && <Ativos />}
         </div>
       </div>
-      <ModalVincularAtivos />
+      {ModalVincularAtivos()}
     </div>
   );
 }
