@@ -308,6 +308,11 @@ export default function Carteira() {
   // aporte rápido
   const [aporteModal, setAporteModal] = useState(false);
 
+  // limpar carteira (apaga todos os ativos + zera totais)
+  const [limparModal, setLimparModal] = useState(false);
+  const [limparInput, setLimparInput] = useState("");
+  const [limpando, setLimpando] = useState(false);
+
   const fileInputRef = useRef(null);
 
   // ─── Carregar ───────────────────────────────────────────────
@@ -341,8 +346,12 @@ export default function Carteira() {
   // ─── Gestão de ativos ───────────────────────────────────────
   const getAtivos = (classKey) => snap[classKey + "Ativos"] || [];
   const getClassTotal = (classKey) => {
-    const ativos = snap[classKey + "Ativos"] || [];
-    if (ativos.length > 0) return ativos.reduce((acc, a) => acc + parseCentavos(a.valor) / 100, 0);
+    const ativosKey = classKey + "Ativos";
+    // Se o array de ativos existe (mesmo vazio), ele é a fonte da verdade.
+    // Só cai no total legado quando o cliente nunca usou ativos individuais.
+    if (Array.isArray(snap[ativosKey])) {
+      return snap[ativosKey].reduce((acc, a) => acc + parseCentavos(a.valor) / 100, 0);
+    }
     return parseCentavos(snap[classKey]) / 100;
   };
 
@@ -473,11 +482,13 @@ export default function Carteira() {
       const dados = s.data() || {};
       const novoForm = { ...formRef.current };
 
-      // Sincroniza total da classe com soma dos ativos
+      // Sincroniza total da classe com soma dos ativos.
+      // Se o array de ativos existe (mesmo vazio), ele manda — zera o legado
+      // quando todos os ativos foram removidos.
       CLASSES.forEach((c) => {
-        const ativos = novoForm[c.key + "Ativos"] || [];
-        if (ativos.length > 0) {
-          const tot = ativos.reduce((acc, a) => acc + parseCentavos(a.valor), 0);
+        const ativosKey = c.key + "Ativos";
+        if (Array.isArray(novoForm[ativosKey])) {
+          const tot = novoForm[ativosKey].reduce((acc, a) => acc + parseCentavos(a.valor), 0);
           novoForm[c.key] = String(tot);
         }
       });
@@ -571,6 +582,41 @@ export default function Carteira() {
     await salvarSilencioso(novoForm);
   }
 
+  // ─── Limpar carteira (apaga todos os ativos + zera totais) ──
+  async function limparCarteira() {
+    setLimpando(true);
+    try {
+      const s = await getDoc(doc(db, "clientes", id));
+      const dados = s.data() || {};
+
+      // Zera todos os totais legados e limpa todos os ativos individuais
+      const novaCarteira = { ...(formRef.current || {}) };
+      CLASSES.forEach((c) => {
+        novaCarteira[c.key] = "0";
+        novaCarteira[c.key + "Ativos"] = [];
+      });
+      novaCarteira.liquidezD1 = "0";
+      novaCarteira.rentabilidadeCalculada = "";
+      novaCarteira.atualizadoEm = hojeBr();
+
+      // Zera também o campo de patrimônio manual no root do cliente
+      // para que o patrimônio financeiro total vá a zero imediatamente.
+      const patch = { ...dados, carteira: novaCarteira, patrimonio: "0" };
+      await setDoc(doc(db, "clientes", id), patch);
+
+      formRef.current = { ...novaCarteira };
+      setSnap({ ...novaCarteira });
+      setIsEditing(false);
+      setLimparModal(false);
+      setLimparInput("");
+      setMsg("✓ Carteira apagada. Patrimônio financeiro zerado.");
+      setTimeout(() => setMsg(""), 4000);
+    } catch (e) {
+      setMsg("Erro ao limpar: " + e.message);
+    }
+    setLimpando(false);
+  }
+
   // ─── Upload PDF/Imagem ──────────────────────────────────────
   async function handleUpload(e) {
     const file = e.target.files?.[0];
@@ -636,6 +682,17 @@ export default function Carteira() {
       {xpSummary && <RelatorioModal meta={xpSummary} onClose={() => setXpSummary(null)} />}
       {uploadProgress && <UploadOverlay progress={uploadProgress} onClose={() => setUploadProgress(null)} />}
       {aporteModal && <AporteModal onClose={() => setAporteModal(false)} onSave={registrarAporte} />}
+      {limparModal && (
+        <LimparCarteiraModal
+          nomeCliente={clienteNome}
+          total={total}
+          input={limparInput}
+          setInput={setLimparInput}
+          limpando={limpando}
+          onClose={() => { setLimparModal(false); setLimparInput(""); }}
+          onConfirm={limparCarteira}
+        />
+      )}
       {classeAberta && (
         <ClasseDrilldown
           classe={classByKey[classeAberta]}
@@ -1128,6 +1185,26 @@ export default function Carteira() {
             }}
           >
             {salvando ? "Salvando..." : isEditing ? "💾 Salvar & Sincronizar" : "✎ Editar Carteira"}
+          </button>
+          <button
+            onClick={() => { setLimparInput(""); setLimparModal(true); }}
+            disabled={salvando || limpando}
+            title="Apaga todos os ativos e zera o patrimônio financeiro"
+            style={{
+              padding: "16px 22px",
+              background: "rgba(239,68,68,0.06)",
+              border: "0.5px solid rgba(239,68,68,0.35)",
+              borderRadius: T.radiusMd,
+              color: "#ef4444",
+              fontSize: 12,
+              cursor: (salvando || limpando) ? "not-allowed" : "pointer",
+              fontFamily: T.fontFamily,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              fontWeight: 500,
+            }}
+          >
+            🗑 Apagar Ativos
           </button>
         </div>
 
@@ -1799,6 +1876,91 @@ const InputPctLg = memo(function InputPctLg({ initValue, onCommit, placeholder =
 // ══════════════════════════════════════════════════════════════
 // MODAL DE APORTE
 // ══════════════════════════════════════════════════════════════
+function LimparCarteiraModal({ nomeCliente, total, input, setInput, limpando, onClose, onConfirm }) {
+  const nomeAlvo = (nomeCliente || "").trim();
+  const confirmado = input.trim().toLowerCase() === nomeAlvo.toLowerCase() && nomeAlvo.length > 0;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", zIndex: 800,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+    }} onClick={limpando ? undefined : onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: T.bgCard, border: "0.5px solid rgba(239,68,68,0.35)",
+          borderRadius: T.radiusLg, padding: 24, width: 460, maxWidth: "95vw",
+          boxShadow: T.shadowLg,
+        }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span style={{ fontSize: 20 }}>⚠️</span>
+          <div style={{ fontSize: 16, fontWeight: 500, color: "#ef4444" }}>Apagar todos os ativos da carteira</div>
+        </div>
+        <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.65, marginBottom: 14 }}>
+          Esta ação irá remover <strong style={{ color: "#ef4444" }}>todos os ativos</strong> da carteira de{" "}
+          <strong style={{ color: T.gold }}>{nomeAlvo || "—"}</strong>, zerar os totais de cada classe e
+          atualizar o <strong>patrimônio financeiro para R$ 0,00</strong> na hora.
+        </div>
+        {total > 0 && (
+          <div style={{
+            padding: "10px 12px", background: "rgba(239,68,68,0.06)",
+            border: "0.5px solid rgba(239,68,68,0.25)", borderRadius: T.radiusSm,
+            fontSize: 11, color: "#fca5a5", marginBottom: 14,
+          }}>
+            Valor atual da carteira: <strong>{brl(total)}</strong> — será zerado.
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 8 }}>
+          Para confirmar, digite o nome do cliente (<strong style={{ color: T.textSecondary }}>{nomeAlvo}</strong>):
+        </div>
+        <input
+          autoFocus
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={limpando}
+          placeholder="Nome do cliente"
+          style={{
+            width: "100%", padding: "10px 12px",
+            background: "rgba(255,255,255,0.03)",
+            border: `0.5px solid ${T.border}`,
+            borderRadius: T.radiusSm,
+            color: T.textPrimary, fontSize: 12, fontFamily: T.fontFamily,
+            outline: "none", marginBottom: 16,
+          }}
+        />
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={onClose}
+            disabled={limpando}
+            style={{
+              flex: 1, padding: 11,
+              background: "rgba(255,255,255,0.04)",
+              border: `0.5px solid ${T.border}`,
+              borderRadius: 9, color: T.textSecondary,
+              fontSize: 11, cursor: limpando ? "not-allowed" : "pointer",
+              fontFamily: T.fontFamily,
+            }}
+          >Cancelar</button>
+          <button
+            onClick={onConfirm}
+            disabled={limpando || !confirmado}
+            style={{
+              flex: 1, padding: 11,
+              background: confirmado ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.05)",
+              border: "0.5px solid rgba(239,68,68,0.45)",
+              borderRadius: 9, color: "#ef4444",
+              fontSize: 11, cursor: (limpando || !confirmado) ? "not-allowed" : "pointer",
+              fontFamily: T.fontFamily, fontWeight: 600,
+              opacity: limpando ? 0.5 : 1,
+            }}
+          >{limpando ? "Apagando..." : "Apagar permanentemente"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AporteModal({ onClose, onSave }) {
   const [valor, setValor] = useState("");
   const [data, setData] = useState(new Date().toISOString().slice(0, 10));

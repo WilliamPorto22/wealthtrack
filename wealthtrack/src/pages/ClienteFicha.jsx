@@ -236,10 +236,11 @@ function CustomSelect({value,onChange,options,placeholder="Selecione"}) {
 // Título de seção premium — grande, bold, com barra dourada
 function SectionTitle({children, icon, subtitle}) {
   return (
-    <div style={{marginTop:32,marginBottom:18,textAlign:"center",...noEdit}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:4}}>
+    <div style={{marginTop:44,marginBottom:22,textAlign:"center",...noEdit}}>
+      <div style={{width:"100%",height:"0.5px",background:`linear-gradient(90deg,transparent,rgba(240,162,2,0.25),transparent)`,marginBottom:18}}/>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:6}}>
         <div style={{width:3,height:22,borderRadius:2,background:"linear-gradient(180deg,#F0A202,rgba(240,162,2,0.3))"}}/>
-        {icon&&<span style={{fontSize:18}}>{icon}</span>}
+        {icon&&<span style={{fontSize:20}}>{icon}</span>}
         <h2 style={{fontSize:18,fontWeight:500,color:T.textPrimary,letterSpacing:"-0.01em",margin:0,lineHeight:1.2}}>{children}</h2>
       </div>
       {subtitle&&<div style={{fontSize:11,color:T.textSecondary,letterSpacing:"0.01em"}}>{subtitle}</div>}
@@ -651,8 +652,16 @@ export default function ClienteFicha() {
   const aporteRegistradoVal = parseCentavos(snap.aporteRegistradoMes)/100;
   const rendaMensal = parseCentavos(snap.salarioMensal)/100||parseCentavos(snap.fluxo?.renda)/100||0;
 
-  // Portfolio total
-  const totalCarteira = CLASSES_CARTEIRA.reduce((acc,c)=>acc+parseCentavos(snap.carteira?.[c.key])/100,0);
+  // Portfolio total — se a classe tem array de ativos usa a soma, senão usa o total legado
+  const getClassTotalFicha = (c) => {
+    const carteira = snap.carteira || {};
+    const ativosKey = c.key + "Ativos";
+    if (Array.isArray(carteira[ativosKey])) {
+      return carteira[ativosKey].reduce((acc,a)=>acc+parseCentavos(a.valor)/100, 0);
+    }
+    return parseCentavos(carteira[c.key])/100;
+  };
+  const totalCarteira = CLASSES_CARTEIRA.reduce((acc,c)=>acc+getClassTotalFicha(c),0);
 
   // Real estate total (midpoints × quantity)
   const totalImoveis = (snap.imoveis||[]).reduce((acc,im)=>{
@@ -674,9 +683,12 @@ export default function ClienteFicha() {
   // Total patrimônio
   const patrimonioCalculado = totalCarteira+totalImoveis+totalVeiculos;
   const patrimonioManual = parseCentavos(snap.patrimonio)/100;
-  const patrimonioDisplay = patrimonioCalculado>0?patrimonioCalculado:patrimonioManual;
+  // Se a carteira foi configurada com ativos (mesmo que agora vazia), usa o calculado
+  // para evitar que o valor manual antigo "ressuscite" quando os ativos são apagados.
+  const carteiraEngaged = CLASSES_CARTEIRA.some(c=>Array.isArray(snap.carteira?.[c.key+"Ativos"]));
+  const patrimonioDisplay = (patrimonioCalculado>0||carteiraEngaged)?patrimonioCalculado:patrimonioManual;
   // Segmento usa só patrimônio financeiro (carteira ou campo manual)
-  const patrimonioFinanceiro = totalCarteira>0 ? totalCarteira : patrimonioManual;
+  const patrimonioFinanceiro = (totalCarteira>0||carteiraEngaged) ? totalCarteira : patrimonioManual;
   const segmento = segmentoAuto(String(Math.round(patrimonioFinanceiro*100)));
 
   // Emergency reserve
@@ -1050,18 +1062,11 @@ export default function ClienteFicha() {
           <div style={{position:"absolute",top:-120,right:-120,width:340,height:340,background:"radial-gradient(circle,rgba(240,162,2,0.10) 0%,transparent 65%)",pointerEvents:"none",filter:"blur(10px)"}}/>
           <div style={{position:"absolute",bottom:-140,left:-100,width:360,height:360,background:"radial-gradient(circle,rgba(25,130,196,0.08) 0%,transparent 65%)",pointerEvents:"none",filter:"blur(10px)"}}/>
 
-          {/* Header — Avatar + Nome + Status */}
-          <div style={{position:"relative",display:"flex",alignItems:"flex-start",gap:isMobile?14:18,marginBottom:isMobile?16:22}}>
-            {/* Avatar com anel de glow */}
-            <div style={{position:"relative",flexShrink:0}}>
-              <div style={{position:"absolute",inset:-4,borderRadius:18,background:"linear-gradient(135deg,rgba(240,162,2,0.35),rgba(240,162,2,0.02))",filter:"blur(12px)",opacity:0.55,pointerEvents:"none"}}/>
-              <div style={{position:"relative"}}>
-                <AvatarIcon tipo={snap.avatar} size={isMobile?56:72}/>
-              </div>
-            </div>
+          {/* Header — Nome + Status */}
+          <div style={{position:"relative",marginBottom:isMobile?16:22}}>
 
             {/* Info */}
-            <div style={{flex:1,minWidth:0}}>
+            <div style={{minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
                 <div style={{fontSize:isMobile?19:24,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.02em",lineHeight:1.2,...noEdit}}>
                   {snap.nome||"Novo cliente"}
@@ -1270,19 +1275,31 @@ export default function ClienteFicha() {
             <SectionTitle icon="👤" subtitle="Como você se apresenta ao mundo">Identificação</SectionTitle>
 
             {/* Avatar */}
-            <div style={{marginBottom:20}}>
+            <div style={{marginBottom:28}}>
               <Lbl>Avatar</Lbl>
-              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+              <div style={{display:"flex",gap:16,flexWrap:"wrap",justifyContent:"center",marginTop:8}}>
                 {AVATAR_OPTS.map(opt=>(
-                  <div key={opt.key} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,cursor:"pointer",opacity:snap.avatar===opt.key?1:0.35,transition:"opacity 0.2s",...noEdit}} onClick={()=>setFSnap("avatar",opt.key)}>
-                    <AvatarIcon tipo={opt.key} size={40}/>
-                    <span style={{fontSize:9,color:T.textMuted}}>{opt.label}</span>
+                  <div
+                    key={opt.key}
+                    onClick={()=>setFSnap("avatar",opt.key)}
+                    style={{
+                      display:"flex",flexDirection:"column",alignItems:"center",gap:8,
+                      cursor:"pointer",transition:"all 0.2s",...noEdit,
+                      padding:"12px 10px",borderRadius:14,
+                      background:snap.avatar===opt.key?"rgba(240,162,2,0.12)":"rgba(255,255,255,0.02)",
+                      border:snap.avatar===opt.key?"1px solid rgba(240,162,2,0.5)":`1px solid ${T.border}`,
+                      opacity:snap.avatar===opt.key?1:0.6,
+                      minWidth:72,
+                    }}
+                  >
+                    <AvatarIcon tipo={opt.key} size={52}/>
+                    <span style={{fontSize:11,color:snap.avatar===opt.key?"#F0A202":T.textSecondary,fontWeight:snap.avatar===opt.key?600:400,letterSpacing:"0.02em"}}>{opt.label}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
               <div style={{gridColumn:"1/-1"}} ref={nomeFieldRef}>
                 <Lbl>Nome completo <span style={{color:"#F0A202"}}>*</span></Lbl>
                 <InputTexto
@@ -1326,8 +1343,8 @@ export default function ClienteFicha() {
             {/* ═══ SEÇÃO 2: FAMÍLIA ═════════════════════════════════ */}
             <SectionTitle icon="👨‍👩‍👧‍👦" subtitle="Entender a família ajuda a pensar em sucessão, seguros e educação">Família</SectionTitle>
 
-            <div style={{marginBottom:16}}>
-              <Lbl>Estado civil</Lbl>
+            <div style={{marginBottom:28}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Estado civil</div>
               <PillChoice value={snap.estadoCivil} onChange={v=>setFSnap("estadoCivil",v)} options={ESTADO_CIVIL}/>
             </div>
 
@@ -1338,8 +1355,8 @@ export default function ClienteFicha() {
               </div>
             )}
 
-            <div style={{marginBottom:16}}>
-              <Lbl>Tem filhos?</Lbl>
+            <div style={{marginBottom:28}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Tem filhos?</div>
               <PillChoice value={snap.temFilhos} onChange={v=>setFSnap("temFilhos",v)} options={["Sim","Não"]}/>
             </div>
 
@@ -1372,7 +1389,7 @@ export default function ClienteFicha() {
             {/* ═══ SEÇÃO 3: LOCALIZAÇÃO & PERFIL ═════════════════════ */}
             <SectionTitle icon="📍" subtitle="Onde mora e como se identifica no dia-a-dia">Localização e Perfil</SectionTitle>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
               <div>
                 <Lbl>Estado</Lbl>
                 <CustomSelect value={snap.uf} onChange={v=>setFSnap("uf",v)} options={ESTADOS_BRASIL} placeholder="Selecione o estado"/>
@@ -1394,7 +1411,7 @@ export default function ClienteFicha() {
             {/* ═══ SEÇÃO 4: DADOS FINANCEIROS ═════════════════════════ */}
             <SectionTitle icon="💰" subtitle="Fotografia do fluxo financeiro mensal">Renda, Gastos e Aportes</SectionTitle>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
               <div>
                 <Lbl>Renda / Salário médio mensal</Lbl>
                 <InputMoeda key={`sal-${id}`} initValue={snap.salarioMensal} onCommit={v=>setFSnap("salarioMensal",v)}/>
@@ -1420,14 +1437,15 @@ export default function ClienteFicha() {
             {/* ═══ SEÇÃO 5: PATRIMÔNIO FINANCEIRO ═════════════════════ */}
             <SectionTitle icon="📊" subtitle="Investimentos que você já possui">Patrimônio Financeiro</SectionTitle>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:16}}>
+            <div style={{display:"flex",flexDirection:"column",gap:20,marginBottom:16}}>
               <div>
-                <Lbl>Patrimônio financeiro total (manual)</Lbl>
+                <div style={{fontSize:13,color:T.textSecondary,marginBottom:6,textAlign:"center",...noEdit}}>Patrimônio financeiro total (manual)</div>
                 <InputMoeda key={`pat-${id}`} initValue={snap.patrimonio} onCommit={v=>setFSnap("patrimonio",v)}/>
-                <div style={{fontSize:10,color:T.textMuted,marginTop:6,...noEdit}}>Preenchido automaticamente quando cadastrar a carteira</div>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:6,textAlign:"center",...noEdit}}>Preenchido automaticamente quando cadastrar a carteira</div>
               </div>
               <div>
-                <Lbl>Liquidez diária disponível <span style={{color:T.textMuted}}>(reserva de emergência)</span></Lbl>
+                <div style={{fontSize:13,color:T.textSecondary,marginBottom:6,textAlign:"center",...noEdit}}>Liquidez diária disponível</div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:10,textAlign:"center",...noEdit}}>Reserva de emergência — valor que pode resgatar em D+0/D+1</div>
                 <InputMoeda key={`liq-${id}`} initValue={snap.liquidezDiaria} onCommit={v=>setFSnap("liquidezDiaria",v)}/>
                 {(()=>{
                   const liq = parseCentavos(snap.liquidezDiaria)/100;
@@ -1447,7 +1465,7 @@ export default function ClienteFicha() {
                       </div>
                     );
                   }
-                  return <div style={{fontSize:10,color:T.textMuted,marginTop:6,...noEdit}}>Valor que pode resgatar em D+0/D+1 — usaremos para calcular cobertura de 6 meses de gastos</div>;
+                  return null;
                 })()}
               </div>
             </div>
@@ -1545,8 +1563,8 @@ export default function ClienteFicha() {
             {/* ═══ SEÇÃO 7.5: PROTEÇÃO, SUCESSÃO E PREVIDÊNCIA ═══════════ */}
             <SectionTitle icon="🛡️" subtitle="Blindagem para imprevistos e transferência para próximas gerações">Proteção, Sucessão e Previdência</SectionTitle>
 
-            <div style={{marginBottom:16}}>
-              <Lbl>Possui seguro de vida?</Lbl>
+            <div style={{marginBottom:28,paddingBottom:8}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Possui seguro de vida?</div>
               <PillChoice
                 value={snap.temSeguroVida===true?"Sim":snap.temSeguroVida===false?"Não":""}
                 allowDeselect={false}
@@ -1570,8 +1588,9 @@ export default function ClienteFicha() {
               </div>
             )}
 
-            <div style={{marginBottom:16}}>
-              <Lbl>Já possui planejamento sucessório? <span style={{color:T.textMuted,textTransform:"none",letterSpacing:0,fontSize:10}}>(VGBL, holding, testamento)</span></Lbl>
+            <div style={{marginBottom:28,paddingBottom:8}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:6,textAlign:"center",...noEdit}}>Já possui planejamento sucessório?</div>
+              <div style={{fontSize:11,color:T.textMuted,marginBottom:14,textAlign:"center",...noEdit}}>VGBL, holding, testamento</div>
               <PillChoice
                 value={snap.temPlanoSucessorio===true?"Sim":snap.temPlanoSucessorio===false?"Não":""}
                 allowDeselect={false}
@@ -1583,8 +1602,9 @@ export default function ClienteFicha() {
               />
             </div>
 
-            <div style={{marginBottom:16}}>
-              <Lbl>Possui previdência privada? <span style={{color:T.textMuted,textTransform:"none",letterSpacing:0,fontSize:10}}>(VGBL/PGBL)</span></Lbl>
+            <div style={{marginBottom:28,paddingBottom:8}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:6,textAlign:"center",...noEdit}}>Possui previdência privada?</div>
+              <div style={{fontSize:11,color:T.textMuted,marginBottom:14,textAlign:"center",...noEdit}}>VGBL / PGBL</div>
               <PillChoice
                 value={snap.temPrevidencia===true?"Sim":snap.temPrevidencia===false?"Não":""}
                 allowDeselect={false}
@@ -1606,24 +1626,24 @@ export default function ClienteFicha() {
             {/* ═══ SEÇÃO 8: MODELO DE ATENDIMENTO E CARTEIRA ════════════ */}
             <SectionTitle icon="📈" subtitle="Como é atendido hoje e estilo de investimento">Atendimento Atual e Perfil de Investidor</SectionTitle>
 
-            <div style={{marginBottom:16}}>
-              <Lbl>Modelo de atendimento atual</Lbl>
+            <div style={{marginBottom:28}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Modelo de atendimento atual</div>
               <PillChoice value={snap.modeloAtendimento} onChange={v=>{setFSnap("modeloAtendimento",v);setFSnap("feeBased",v==="Fee Based");}} options={MODELO_ATENDIMENTO}/>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:16}}>
-              <div>
-                <Lbl>Rentabilidade anual atual (%)</Lbl>
+            <div style={{marginBottom:28}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:6,textAlign:"center",...noEdit}}>Rentabilidade anual atual (%)</div>
+              <div style={{fontSize:11,color:T.textMuted,marginBottom:12,textAlign:"center",...noEdit}}>Estimativa de retorno médio ao ano</div>
+              <div style={{display:"flex",justifyContent:"center"}}>
                 <input type="text" inputMode="decimal" value={snap.rentabilidadeAnual||""} onChange={e=>{
                   const v=e.target.value.replace(/[^\d,.]/g,"").replace(",",".");
                   setFSnap("rentabilidadeAnual",v);
-                }} style={C.input} placeholder="Ex: 9,5"/>
-                <div style={{fontSize:10,color:T.textMuted,marginTop:5,...noEdit}}>Estimativa de retorno médio ao ano</div>
+                }} style={{...C.input,textAlign:"center",fontSize:18,maxWidth:220,letterSpacing:"0.04em"}} placeholder="9,5"/>
               </div>
             </div>
 
-            <div style={{marginBottom:12}}>
-              <Lbl>Foco principal dos investimentos</Lbl>
+            <div style={{marginBottom:28}}>
+              <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Foco principal dos investimentos</div>
               <PillChoice value={snap.focoInvestimento} onChange={v=>setFSnap("focoInvestimento",v)} options={FOCOS_INVESTIMENTO}/>
             </div>
 
@@ -1721,7 +1741,7 @@ export default function ClienteFicha() {
                   ].filter(x=>x.v>0);
 
                   const classesAtivas = CLASSES_CARTEIRA.map(c=>({
-                    ...c, value:parseCentavos(snap.carteira?.[c.key])/100
+                    ...c, value:getClassTotalFicha(c)
                   })).filter(c=>c.value>0);
 
                   const pizzaBrGlobal = [
@@ -1737,7 +1757,7 @@ export default function ClienteFicha() {
                   return (
                     <>
                       {/* ── Linha 1: Barras + Pizza Patrimônio por Categoria ── */}
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12,alignItems:"stretch"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20,alignItems:"stretch"}}>
                         <div style={panelStyle}>
                           <div style={panelTitle}>Distribuição em Reais (R$)</div>
                           <BarChartVertical items={cats}/>
@@ -1757,7 +1777,7 @@ export default function ClienteFicha() {
 
                       {/* ── Linha 2: Pizza Brasil vs Global + Pizza Classes ── */}
                       {totalCarteira>0&&(
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12,alignItems:"stretch"}}>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20,alignItems:"stretch"}}>
                           {/* Brasil vs Global */}
                           <div style={panelStyle}>
                             <div style={panelTitle}>Brasil vs Global (USD)</div>
