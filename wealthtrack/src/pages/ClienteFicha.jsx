@@ -165,6 +165,7 @@ const CLASSES_CARTEIRA = [
   {key:"globalFunds",    label:"Global – Funds",       cor:"#7c3aed"},
   {key:"globalBonds",    label:"Global – Bonds",       cor:"#9333ea"},
   {key:"global",         label:"Global (Geral)",       cor:"#60a5fa"},
+  {key:"outros",         label:"Outros / Não Classif.",cor:"#94a3b8"},
 ];
 
 const noEdit = {userSelect:"none",WebkitUserSelect:"none",cursor:"default"};
@@ -234,13 +235,12 @@ function CustomSelect({value,onChange,options,placeholder="Selecione"}) {
 }
 
 // Título de seção premium — grande, bold, com barra dourada
-function SectionTitle({children, icon, subtitle}) {
+function SectionTitle({children, subtitle}) {
   return (
     <div style={{marginTop:44,marginBottom:22,textAlign:"center",...noEdit}}>
       <div style={{width:"100%",height:"0.5px",background:`linear-gradient(90deg,transparent,rgba(240,162,2,0.25),transparent)`,marginBottom:18}}/>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:6}}>
         <div style={{width:3,height:22,borderRadius:2,background:"linear-gradient(180deg,#F0A202,rgba(240,162,2,0.3))"}}/>
-        {icon&&<span style={{fontSize:20}}>{icon}</span>}
         <h2 style={{fontSize:18,fontWeight:500,color:T.textPrimary,letterSpacing:"-0.01em",margin:0,lineHeight:1.2}}>{children}</h2>
       </div>
       {subtitle&&<div style={{fontSize:11,color:T.textSecondary,letterSpacing:"0.01em"}}>{subtitle}</div>}
@@ -1258,7 +1258,7 @@ export default function ClienteFicha() {
 
         {/* ─── EDIT MODE ──────────────────────────────────────────── */}
         {modo==="editar"&&(
-          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:isMobile?14:18,padding:isMobile?"8px 16px 22px":"14px 28px 32px",margin:"0 auto",textAlign:"center"}}>
+          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:isMobile?14:18,padding:isMobile?"8px 16px 22px":"14px 28px 32px",margin:"0 auto",textAlign:"center",maxWidth:680}}>
 
             {id==="novo"&&(
               <div style={{marginTop:18,marginBottom:6,padding:"18px 20px",background:"linear-gradient(135deg,rgba(240,162,2,0.08),rgba(240,162,2,0.02))",border:"0.5px solid rgba(240,162,2,0.22)",borderRadius:14}}>
@@ -1272,7 +1272,7 @@ export default function ClienteFicha() {
             )}
 
             {/* ═══ SEÇÃO 1: IDENTIFICAÇÃO ═══════════════════════════ */}
-            <SectionTitle icon="👤" subtitle="Como você se apresenta ao mundo">Identificação</SectionTitle>
+            <SectionTitle subtitle="Como você se apresenta ao mundo">Identificação</SectionTitle>
 
             {/* Avatar */}
             <div style={{marginBottom:28}}>
@@ -1341,7 +1341,7 @@ export default function ClienteFicha() {
             </div>
 
             {/* ═══ SEÇÃO 2: FAMÍLIA ═════════════════════════════════ */}
-            <SectionTitle icon="👨‍👩‍👧‍👦" subtitle="Entender a família ajuda a pensar em sucessão, seguros e educação">Família</SectionTitle>
+            <SectionTitle subtitle="Entender a família ajuda a pensar em sucessão, seguros e educação">Família</SectionTitle>
 
             <div style={{marginBottom:28}}>
               <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Estado civil</div>
@@ -1387,7 +1387,7 @@ export default function ClienteFicha() {
             )}
 
             {/* ═══ SEÇÃO 3: LOCALIZAÇÃO & PERFIL ═════════════════════ */}
-            <SectionTitle icon="📍" subtitle="Onde mora e como se identifica no dia-a-dia">Localização e Perfil</SectionTitle>
+            <SectionTitle subtitle="Onde mora e como se identifica no dia-a-dia">Localização e Perfil</SectionTitle>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
               <div>
@@ -1409,7 +1409,7 @@ export default function ClienteFicha() {
             </div>
 
             {/* ═══ SEÇÃO 4: DADOS FINANCEIROS ═════════════════════════ */}
-            <SectionTitle icon="💰" subtitle="Fotografia do fluxo financeiro mensal">Renda, Gastos e Aportes</SectionTitle>
+            <SectionTitle subtitle="Fotografia do fluxo financeiro mensal">Renda, Gastos e Aportes</SectionTitle>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
               <div>
@@ -1428,16 +1428,17 @@ export default function ClienteFicha() {
                 <Lbl>Meta de aporte mensal</Lbl>
                 <InputMoeda key={`meta-${id}`} initValue={snap.metaAporteMensal} onCommit={v=>setFSnap("metaAporteMensal",v)}/>
               </div>
-              <div style={{gridColumn:"1/-1"}}>
-                <Lbl>Dia do mês em que costuma aportar <span style={{color:T.textMuted}}>(usaremos para lembrar de contatá-lo)</span></Lbl>
+              <div style={{gridColumn:"1/-1",maxWidth:320,margin:"0 auto",width:"100%"}}>
+                <Lbl>Dia do mês em que costuma aportar?</Lbl>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:-4,marginBottom:8,textAlign:"center",letterSpacing:"0.02em"}}>Usaremos para lembrar de contatá-lo</div>
                 <CustomSelect value={snap.diaAporte} onChange={v=>setFSnap("diaAporte",v)} options={DIAS_MES} placeholder="Selecione o dia do mês"/>
               </div>
             </div>
 
             {/* ═══ SEÇÃO 5: PATRIMÔNIO FINANCEIRO ═════════════════════ */}
-            <SectionTitle icon="📊" subtitle="Investimentos que você já possui">Patrimônio Financeiro</SectionTitle>
+            <SectionTitle subtitle="Investimentos que você já possui">Patrimônio Financeiro</SectionTitle>
 
-            <div style={{display:"flex",flexDirection:"column",gap:20,marginBottom:16}}>
+            <div style={{display:"flex",flexDirection:"column",gap:20,marginBottom:16,maxWidth:380,margin:"0 auto 16px"}}>
               <div>
                 <div style={{fontSize:13,color:T.textSecondary,marginBottom:6,textAlign:"center",...noEdit}}>Patrimônio financeiro total (manual)</div>
                 <InputMoeda key={`pat-${id}`} initValue={snap.patrimonio} onCommit={v=>setFSnap("patrimonio",v)}/>
@@ -1445,7 +1446,7 @@ export default function ClienteFicha() {
               </div>
               <div>
                 <div style={{fontSize:13,color:T.textSecondary,marginBottom:6,textAlign:"center",...noEdit}}>Liquidez diária disponível</div>
-                <div style={{fontSize:11,color:T.textMuted,marginBottom:10,textAlign:"center",...noEdit}}>Reserva de emergência — valor que pode resgatar em D+0/D+1</div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:10,textAlign:"center",...noEdit}}>Reserva de emergência. Valor que pode resgatar em D+0/D+1</div>
                 <InputMoeda key={`liq-${id}`} initValue={snap.liquidezDiaria} onCommit={v=>setFSnap("liquidezDiaria",v)}/>
                 {(()=>{
                   const liq = parseCentavos(snap.liquidezDiaria)/100;
@@ -1471,7 +1472,7 @@ export default function ClienteFicha() {
             </div>
 
             {/* ═══ SEÇÃO 6: PATRIMÔNIO IMOBILIÁRIO ═════════════════════ */}
-            <SectionTitle icon="🏡" subtitle="Imóveis em seu nome — casa, apartamento, terreno, comercial">Patrimônio Imobiliário</SectionTitle>
+            <SectionTitle subtitle="Imóveis em seu nome. Casa, apartamento, terreno, comercial">Patrimônio Imobiliário</SectionTitle>
 
             {(snap.imoveis||[]).length===0&&(
               <div style={{fontSize:12,color:T.textMuted,marginBottom:10,padding:"10px 0",...noEdit}}>Nenhum imóvel cadastrado ainda.</div>
@@ -1507,7 +1508,7 @@ export default function ClienteFicha() {
             </button>
 
             {/* ═══ SEÇÃO 7: VEÍCULOS ═════════════════════════════════ */}
-            <SectionTitle icon="🚗" subtitle="Veículos em seu nome — inclui seguro e valor de mercado">Veículos</SectionTitle>
+            <SectionTitle subtitle="Veículos em seu nome. Inclui seguro e valor de mercado">Veículos</SectionTitle>
 
             {(snap.veiculos||[]).length===0&&(
               <div style={{fontSize:12,color:T.textMuted,marginBottom:10,padding:"10px 0",...noEdit}}>Nenhum veículo cadastrado ainda.</div>
@@ -1561,7 +1562,7 @@ export default function ClienteFicha() {
             </button>
 
             {/* ═══ SEÇÃO 7.5: PROTEÇÃO, SUCESSÃO E PREVIDÊNCIA ═══════════ */}
-            <SectionTitle icon="🛡️" subtitle="Blindagem para imprevistos e transferência para próximas gerações">Proteção, Sucessão e Previdência</SectionTitle>
+            <SectionTitle subtitle="Blindagem para imprevistos e transferência para próximas gerações">Proteção, Sucessão e Previdência</SectionTitle>
 
             <div style={{marginBottom:28,paddingBottom:8}}>
               <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Possui seguro de vida?</div>
@@ -1624,7 +1625,7 @@ export default function ClienteFicha() {
             )}
 
             {/* ═══ SEÇÃO 8: MODELO DE ATENDIMENTO E CARTEIRA ════════════ */}
-            <SectionTitle icon="📈" subtitle="Como é atendido hoje e estilo de investimento">Atendimento Atual e Perfil de Investidor</SectionTitle>
+            <SectionTitle subtitle="Como é atendido hoje e estilo de investimento">Atendimento Atual e Perfil de Investidor</SectionTitle>
 
             <div style={{marginBottom:28}}>
               <div style={{fontSize:13,color:T.textSecondary,marginBottom:14,textAlign:"center",...noEdit}}>Modelo de atendimento atual</div>
@@ -1648,7 +1649,7 @@ export default function ClienteFicha() {
             </div>
 
             {/* ═══ SEÇÃO 9: OBJETIVOS DE INTERESSE ════════════════════ */}
-            <SectionTitle icon="🎯" subtitle="Selecione os objetivos que fazem sentido para você — detalharemos cada um depois">Objetivos que Você Deseja Alcançar</SectionTitle>
+            <SectionTitle subtitle="Selecione os objetivos que fazem sentido para você. Detalharemos cada um depois">Objetivos que Você Deseja Alcançar</SectionTitle>
 
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))",gap:10,marginBottom:18}}>
               {OBJETIVOS_CADASTRO.map(obj=>{

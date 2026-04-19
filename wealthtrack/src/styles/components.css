@@ -111,6 +111,7 @@
 
 .market-indicators {
   display: flex;
+  flex-wrap: wrap;
   background: var(--bg-card);
   border: 0.5px solid var(--border);
   border-radius: 20px;
@@ -121,28 +122,40 @@
 
 @media (max-width: 768px) {
   .market-indicators {
-    flex-direction: column;
+    /* tablet: 2 colunas (grid) para leitura mais rápida que coluna única */
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-bottom: 32px;
   }
 }
 
 @media (max-width: 480px) {
   .market-indicators {
-    margin-bottom: 24px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 20px;
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 360px) {
+  .market-indicators {
+    grid-template-columns: 1fr;
   }
 }
 
 .market-indicator {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  padding: 20px 0;
+  padding: 20px 8px;
   border-right: 0.5px solid var(--border);
   text-align: center;
   user-select: none;
   -webkit-user-select: none;
+  overflow: hidden;
 }
 
 .market-indicator:last-child {
@@ -151,20 +164,29 @@
 
 @media (max-width: 768px) {
   .market-indicator {
-    border-right: none;
+    border-right: 0.5px solid var(--border);
     border-bottom: 0.5px solid var(--border);
-    padding: 16px 12px;
+    padding: 14px 10px;
   }
-
-  .market-indicator:last-child {
-    border-bottom: none;
-  }
+  /* em grid 2-col: remove borda direita das células da col. direita e inferior da última linha */
+  .market-indicator:nth-child(2n) { border-right: none; }
+  .market-indicator:nth-last-child(-n+2) { border-bottom: none; }
+  .market-indicator:last-child { border-right: none; border-bottom: none; }
 }
 
 @media (max-width: 480px) {
   .market-indicator {
-    padding: 12px 8px;
+    padding: 10px 6px;
+    gap: 3px;
   }
+}
+
+@media (max-width: 360px) {
+  .market-indicator {
+    border-right: none !important;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .market-indicator:last-child { border-bottom: none; }
 }
 
 .market-label {
@@ -179,6 +201,16 @@
   font-size: 19px;
   color: var(--gold-light);
   font-weight: 300;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .market-value {
+    font-size: 16px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -190,6 +222,16 @@
 .market-sub {
   font-size: 11px;
   color: inherit;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .market-sub {
+    font-size: 10px;
+  }
 }
 
 /* ═════════════════════════════════════════════════════════════════

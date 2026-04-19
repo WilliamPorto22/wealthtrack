@@ -42,9 +42,20 @@ function brlNum(n){
   if(!n)return"—";
   return n.toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2});
 }
-const CART_KEYS=["posFixado","ipca","preFixado","acoes","fiis","multi","prevVGBL","prevPGBL","globalEquities","globalTreasury","globalFunds","globalBonds","global"];
+const CART_KEYS=["posFixado","ipca","preFixado","acoes","fiis","multi","prevVGBL","prevPGBL","globalEquities","globalTreasury","globalFunds","globalBonds","global","outros"];
+// Soma total do patrimônio financeiro. Prioriza arrays de ativos individuais
+// (fonte da verdade após edição na Carteira) e só cai para o total legado
+// quando a classe nunca foi granularizada. Isso evita mostrar zero quando
+// o cliente tem assets em "outros" ou em qualquer classe importada via PDF.
 function getPatFin(c){
-  const t=CART_KEYS.reduce((s,k)=>s+parseInt(String(c.carteira?.[k]||"0").replace(/\D/g,""))/100,0);
+  const carteira=c.carteira||{};
+  const t=CART_KEYS.reduce((s,k)=>{
+    const ativos=carteira[k+"Ativos"];
+    if(Array.isArray(ativos)){
+      return s+ativos.reduce((a,at)=>a+parseInt(String(at.valor||"0").replace(/\D/g,""))/100,0);
+    }
+    return s+parseInt(String(carteira[k]||"0").replace(/\D/g,""))/100;
+  },0);
   return t>0?t:parseInt(String(c.patrimonio||"0").replace(/\D/g,""))/100;
 }
 
@@ -271,89 +282,98 @@ export default function Dashboard(){
   const clientesRef=useRef(null);
   const intervaloRef=useRef(null);
 
-  // Atualizar cotações do servidor
-  const atualizarCotacoesServidor=async()=>{
-    setAtualizando(true);
-    try{
-      const cotacoes=await obterTodasAsCotacoes();
-      const formatted=formatarCotacoes(cotacoes);
-      setMercado(formatted);
-      setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-
-      // Salvar em localStorage para fallback
-      localStorage.setItem("wealthtrack_cotacoes",JSON.stringify({
-        ...cotacoes,
-        formatted,
-        timestamp: new Date().toISOString()
-      }));
-    }catch(e){
-      console.error("Erro ao atualizar cotações:",e);
-      // Se falhar, tenta carregar do localStorage
-      try{
-        const stored=localStorage.getItem("wealthtrack_cotacoes");
-        if(stored){
-          const data=JSON.parse(stored);
-          if(data.formatted)setMercado(data.formatted);
-        }
-      }catch{}
-    }finally{
-      setAtualizando(false);
-    }
-  };
-
-  // Carregar clientes (com reload on window focus para sincronizar com outras páginas)
+  // Carregar clientes (com reload on window focus + visibility para sincronizar com outras páginas).
+  // Só anima na primeira carga — re-carregamentos silenciosos não disparam GSAP.
+  const primeiraCargaRef=useRef(true);
   const carregarClientes=useCallback(async()=>{
     try{
       const s=await getDocs(collection(db,"clientes"));
       const clientesData=s.docs.map(d=>({id:d.id,...d.data()}));
       setClientes(clientesData);
-      setTimeout(()=>{
-        gsap.fromTo(".client-card",
-          {opacity:0,y:14},
-          {opacity:1,y:0,duration:0.45,stagger:0.06,ease:"power2.out",clearProps:"transform"}
-        );
-        gsap.fromTo(".dashboard-segment-header",
-          {opacity:0,x:-10},
-          {opacity:1,x:0,duration:0.35,stagger:0.08,ease:"power2.out"}
-        );
-      },50);
+      if(primeiraCargaRef.current){
+        primeiraCargaRef.current=false;
+        setTimeout(()=>{
+          gsap.fromTo(".client-card",
+            {opacity:0,y:14},
+            {opacity:1,y:0,duration:0.45,stagger:0.06,ease:"power2.out",clearProps:"transform"}
+          );
+          gsap.fromTo(".dashboard-segment-header",
+            {opacity:0,x:-10},
+            {opacity:1,x:0,duration:0.35,stagger:0.08,ease:"power2.out"}
+          );
+        },50);
+      }
     }catch(e){console.error("Erro ao carregar clientes:",e);}
   },[]);
+
+  // Atualizar cotações do servidor E recarregar clientes (em paralelo).
+  // Garante que o botão "Atualizar" sincroniza tudo: mercado + carteiras + patrimônios.
+  const atualizarCotacoesServidor=useCallback(async()=>{
+    setAtualizando(true);
+    const tarefaCotacoes=(async()=>{
+      try{
+        const cotacoes=await obterTodasAsCotacoes();
+        const formatted=formatarCotacoes(cotacoes);
+        setMercado(formatted);
+        setUltimaAtualizacao(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+        localStorage.setItem("wealthtrack_cotacoes",JSON.stringify({
+          ...cotacoes, formatted, timestamp: new Date().toISOString()
+        }));
+      }catch(e){
+        console.error("Erro ao atualizar cotações:",e);
+        try{
+          const stored=localStorage.getItem("wealthtrack_cotacoes");
+          if(stored){
+            const data=JSON.parse(stored);
+            if(data.formatted)setMercado(data.formatted);
+          }
+        }catch{}
+      }
+    })();
+    const tarefaClientes=carregarClientes();
+    await Promise.allSettled([tarefaCotacoes,tarefaClientes]);
+    setAtualizando(false);
+  },[carregarClientes]);
 
   useEffect(()=>{
     carregarClientes();
     const onFocus=()=>carregarClientes();
+    const onVisibility=()=>{if(document.visibilityState==="visible")carregarClientes();};
     window.addEventListener("focus",onFocus);
-    return()=>window.removeEventListener("focus",onFocus);
+    document.addEventListener("visibilitychange",onVisibility);
+    return()=>{
+      window.removeEventListener("focus",onFocus);
+      document.removeEventListener("visibilitychange",onVisibility);
+    };
   },[carregarClientes]);
 
-  // Atualização automática de cotações — intervalo reconfigurado quando mercado abre/fecha
+  // Atualização inicial + polling com ref estável (evita recriar interval e chamadas duplicadas).
+  // Não dependemos de statusMercado no deps: o listener interno sincroniza via setState.
+  const atualizarRef=useRef(atualizarCotacoesServidor);
+  useEffect(()=>{atualizarRef.current=atualizarCotacoesServidor;},[atualizarCotacoesServidor]);
+
   useEffect(()=>{
-    atualizarCotacoesServidor();
-
-    const aberto=mercadoAberto();
-    if(aberto!==statusMercado)setStatusMercado(aberto);
-
-    if(aberto){
-      // Mercado aberto: atualizar no intervalo configurado (ex. 2h)
-      intervaloRef.current=setInterval(atualizarCotacoesServidor,INTERVALO_ATUALIZACAO);
-    }else{
-      // Mercado fechado: verificar a cada minuto se abriu
-      intervaloRef.current=setInterval(()=>{
-        if(mercadoAberto()){
-          setStatusMercado(true);
-          atualizarCotacoesServidor();
-        }
-      },60000);
-    }
-
+    atualizarRef.current();
+    // Poll curto (60s) que checa o mercado e só dispara cotações respeitando
+    // o intervalo real (INTERVALO_ATUALIZACAO). Um único interval para ambos os casos.
+    let ultimoFetch=Date.now();
+    const tick=()=>{
+      const aberto=mercadoAberto();
+      setStatusMercado(prev=>prev!==aberto?aberto:prev);
+      const agora=Date.now();
+      if(aberto && agora-ultimoFetch>=INTERVALO_ATUALIZACAO){
+        ultimoFetch=agora;
+        atualizarRef.current();
+      }
+    };
+    intervaloRef.current=setInterval(tick,60000);
     return()=>{
       if(intervaloRef.current){
         clearInterval(intervaloRef.current);
         intervaloRef.current=null;
       }
     };
-  },[statusMercado]);
+  },[]);
 
   // Calcular status de cada cliente (memoizado)
   const clientesComStatus=useMemo(()=>clientes.map(c=>({

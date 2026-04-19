@@ -32,7 +32,7 @@
   font-family: -apple-system, "SF Pro Display", sans-serif;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  /* não usar overflow:hidden — isso corta dropdowns de busca/ações */
 }
 
 /* NAVBAR BRAND (Logo) */
@@ -223,39 +223,55 @@
   }
 }
 
-/* MOBILE (480px) */
+/* MOBILE (480px) — mantém busca visível em forma compacta */
 @media (max-width: 480px) {
   .navbar {
-    padding: 8px 12px;
-    gap: 8px;
-    height: 56px;
+    padding: 8px 10px;
+    gap: 6px;
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
   }
 
   .navbar-brand {
-    min-width: 100px;
+    min-width: 0;
+    flex-shrink: 1;
   }
 
   .navbar-center {
-    display: none;
+    order: 3;
+    flex-basis: 100%;
+    gap: 8px;
+    padding-top: 4px;
   }
 
   .navbar-search {
-    display: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 6px 10px;
+  }
+
+  .navbar-search-input {
+    font-size: 12px;
   }
 
   .navbar-date {
     font-size: 10px;
-    min-width: 60px;
+    min-width: 0;
   }
 
   .navbar-actions {
-    gap: 8px;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
   .navbar-action-btn {
-    padding: 4px 8px;
+    padding: 6px 10px;
     font-size: 9px;
-    border-radius: 4px;
+    border-radius: 6px;
+    min-height: 36px;
+    min-width: 36px;
+    justify-content: center;
   }
 
   .navbar-btn-label {
@@ -263,7 +279,25 @@
   }
 
   .navbar-btn-icon {
-    font-size: 12px;
+    font-size: 14px;
+  }
+}
+
+/* ULTRA-COMPACTO (sub-360px — iPhone SE, Android antigos) */
+@media (max-width: 360px) {
+  .navbar {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .navbar-search {
+    padding: 5px 8px;
+  }
+
+  .navbar-action-btn {
+    padding: 5px 8px;
+    min-height: 34px;
+    min-width: 34px;
   }
 }
 

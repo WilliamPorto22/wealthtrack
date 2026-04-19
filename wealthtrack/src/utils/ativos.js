@@ -14,6 +14,7 @@ export const CLASSES_CARTEIRA = [
   { key: "globalFunds",    label: "Global – Mutual Funds",      cor: "#7c3aed", liq: "d+2" },
   { key: "globalBonds",    label: "Global – Bonds",             cor: "#9333ea", liq: "d+2" },
   { key: "global",         label: "Invest. Globais (Geral)",     cor: "#a855f7", liq: "d+2" },
+  { key: "outros",         label: "Outros / Não Classificado",    cor: "#94a3b8", liq: "—" },
 ];
 
 // Mapeia o `tipo` do objetivo para o valor armazenado em `ativo.objetivo`

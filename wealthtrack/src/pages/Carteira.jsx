@@ -511,7 +511,21 @@ export default function Carteira() {
       const stubsCriados = objetivosFinal.length - objetivosAtuais.length;
 
       // Atualiza aporteRegistradoMes no root do cliente (compat dashboard)
-      const patch = { ...dados, carteira: novaCarteira, objetivos: objetivosFinal };
+      // e sincroniza patrimônio root-level com o total financeiro consolidado
+      // (inclui imóveis/veículos já presentes em dados, mais o novo total da carteira).
+      const totalCarteiraNovo = CLASSES.reduce((acc, c) => {
+        const ativosKey = c.key + "Ativos";
+        if (Array.isArray(novoForm[ativosKey])) {
+          return acc + novoForm[ativosKey].reduce((s, a) => s + parseCentavos(a.valor), 0);
+        }
+        return acc + parseCentavos(novoForm[c.key]);
+      }, 0);
+      const patch = {
+        ...dados,
+        carteira: novaCarteira,
+        objetivos: objetivosFinal,
+        patrimonio: String(totalCarteiraNovo),
+      };
       if (aporteMesAtual > 0) {
         patch.aporteRegistradoMes = String(Math.round(aporteMesAtual * 100));
         patch.aporteRegistradoMesEm = mesAtualStr();
