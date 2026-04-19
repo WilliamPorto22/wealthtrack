@@ -32,44 +32,60 @@ function brl(v) {
 const emojisPorTipo = {
   aposentadoria: "🏖️",
   imovel: "🏠",
+  liquidez: "🛟",
   carro: "🚗",
+  oportunidade: "🎯",
   viagem: "✈️",
   educacao: "📚",
   saude: "💪",
   sucessaoPatrimonial: "👨‍👩‍👧‍👦",
+  seguros: "🛡️",
+  planoSaude: "❤️‍🩹",
   personalizado: "⭐"
 };
 
 const gradientsPorTipo = {
   aposentadoria:       "linear-gradient(145deg, #2a1f00 0%, #3d2e00 60%, rgba(255,202,58,0.18) 100%)",
   imovel:              "linear-gradient(145deg, #0f2006 0%, #1a360a 60%, rgba(138,201,38,0.18) 100%)",
+  liquidez:            "linear-gradient(145deg, #012218 0%, #023826 60%, rgba(74,222,128,0.18) 100%)",
   carro:               "linear-gradient(145deg, #2a0e00 0%, #3d1800 60%, rgba(255,107,53,0.18) 100%)",
+  oportunidade:        "linear-gradient(145deg, #021e26 0%, #03313e 60%, rgba(6,182,212,0.18) 100%)",
   viagem:              "linear-gradient(145deg, #042522 0%, #0a3430 60%, rgba(93,217,193,0.18) 100%)",
   educacao:            "linear-gradient(145deg, #061c32 0%, #0d2a48 60%, rgba(34,116,165,0.18) 100%)",
   saude:               "linear-gradient(145deg, #041626 0%, #082238 60%, rgba(25,130,196,0.18) 100%)",
   sucessaoPatrimonial: "linear-gradient(145deg, #0c0820 0%, #160f30 60%, rgba(106,76,147,0.18) 100%)",
+  seguros:             "linear-gradient(145deg, #2a0a0a 0%, #3d1010 60%, rgba(239,68,68,0.18) 100%)",
+  planoSaude:          "linear-gradient(145deg, #2a0c1b 0%, #3d1026 60%, rgba(236,72,153,0.18) 100%)",
   personalizado:       "linear-gradient(145deg, #001f10 0%, #003218 60%, rgba(0,204,102,0.18) 100%)",
 };
 
 const coresPorTipo = {
   aposentadoria: "#F0A202",
   imovel: "#8AC926",
+  liquidez: "#4ADE80",
   carro: "#FF6B35",
+  oportunidade: "#06B6D4",
   viagem: "#5DD9C1",
   educacao: "#2274A5",
   saude: "#1982C4",
   sucessaoPatrimonial: "#6A4C93",
+  seguros: "#EF4444",
+  planoSaude: "#EC4899",
   personalizado: "#00CC66",
 };
 
 const labelTipoPorTipo = {
   aposentadoria: "Aposentadoria",
   imovel: "Aquisição de Imóvel",
+  liquidez: "Reserva de Emergência",
   carro: "Veículo",
+  oportunidade: "Reserva de Oportunidade",
   viagem: "Viagem",
   educacao: "Educação",
   saude: "Saúde",
   sucessaoPatrimonial: "Sucessão Patrimonial",
+  seguros: "Seguros",
+  planoSaude: "Plano de Saúde",
   personalizado: "Objetivo",
 };
 
@@ -471,50 +487,78 @@ export default function ObjetivoDetalhes() {
     const infoPorTipo = {
       aposentadoria: {
         headline: "Independência Financeira",
-        descricao: (<>{`Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para viver de renda passiva, sem depender de renda ativa.`}<br />{`Juros compostos com meta de ${TAXA_ANUAL}% ao ano real sobre aportes de ${brl(aporte)}/mês.`}</>),
+        descricao: (<>{`Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para viver de renda passiva.`}<br />{`Meta de ${TAXA_ANUAL}% a.a. real sobre aportes de ${brl(aporte)}/mês.`}</>),
         insight: status === "viavel"
-          ? `Plano no caminho certo. Meta atingível em ${anosNec} anos. Renda mensal estimada ao final: ${brl(projecao.at(-1)?.rendaMensalReal)}.`
-          : `Para atingir ${brl(meta)} em ${prazo} anos, é necessário ajustar o aporte ou o prazo. Veja as Estratégias.`,
+          ? `No caminho certo. Meta em ${anosNec} anos — renda final estimada: ${brl(projecao.at(-1)?.rendaMensalReal)}.`
+          : `Para atingir ${brl(meta)} em ${prazo} anos, ajuste aporte ou prazo nas Estratégias.`,
       },
       imovel: {
         headline: "Aquisição do Imóvel",
-        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para compra à vista ou entrada expressiva do imóvel. Cada aporte de ${brl(aporte)}/mês acelera a conquista.`,
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para compra à vista ou entrada. Aporte: ${brl(aporte)}/mês.`,
         insight: status === "viavel"
-          ? `Plano viável — valor projetado ao final do prazo: ${brl(projecao.at(-1)?.totalReal)}.`
-          : `Para atingir a meta em ${prazo} anos, ajuste o plano na aba Estratégias.`,
+          ? `Plano viável — projetado: ${brl(projecao.at(-1)?.totalReal)}.`
+          : `Ajuste o plano na aba Estratégias.`,
+      },
+      liquidez: {
+        headline: "Reserva de Emergência",
+        descricao: `Reserva de ${brl(meta)} em ativos de alta liquidez para proteger o orçamento contra imprevistos (desemprego, saúde, reparos). Recomendação: 6 a 12 meses de custo de vida.`,
+        insight: status === "viavel"
+          ? `Reserva no caminho certo — meta alcançada em ${anosNec} anos mantendo ${brl(aporte)}/mês.`
+          : `Priorize essa reserva — ela é a base de qualquer outro plano. Ajuste aportes nas Estratégias.`,
       },
       carro: {
         headline: "Aquisição do Veículo",
-        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para compra à vista ou com entrada expressiva. Disciplina no aporte mensal é a chave.`,
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para compra à vista ou entrada expressiva.`,
         insight: status === "viavel"
-          ? `Plano no prazo — você atinge ${brl(meta)} em ${anosNec} anos.`
-          : `Ajuste necessário para cumprir o prazo de ${prazo} anos — veja as Estratégias.`,
+          ? `No prazo — ${brl(meta)} em ${anosNec} anos.`
+          : `Ajuste necessário — veja as Estratégias.`,
+      },
+      oportunidade: {
+        headline: "Reserva de Oportunidade",
+        descricao: `Capital de ${brl(meta)} mantido líquido e acessível para capturar oportunidades de investimento (quedas de mercado, ativos descontados, negócios pontuais).`,
+        insight: status === "viavel"
+          ? `Reserva viável em ${anosNec} anos — posicionamento estratégico preservado.`
+          : `Ajuste o aporte para montar a reserva dentro do prazo — veja as Estratégias.`,
       },
       viagem: {
         headline: "Viagem dos Sonhos",
-        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para realizar a viagem planejada. Cada aporte torna o sonho mais próximo.`,
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para realizar a viagem planejada.`,
         insight: status === "viavel"
-          ? `Plano viável — valor projetado ao final: ${brl(projecao.at(-1)?.totalReal)}.`
+          ? `Plano viável — projetado: ${brl(projecao.at(-1)?.totalReal)}.`
           : `Ajuste necessário — veja as Estratégias.`,
       },
       educacao: {
         headline: "Educação",
-        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para custear a formação planejada. Investir em educação é o ativo mais valorizado no longo prazo.`,
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para custear a formação planejada.`,
         insight: status === "viavel"
-          ? `Plano no prazo — valor projetado: ${brl(projecao.at(-1)?.totalReal)}.`
+          ? `No prazo — projetado: ${brl(projecao.at(-1)?.totalReal)}.`
           : `Ajuste necessário — veja as Estratégias.`,
       },
       saude: {
         headline: "Saúde e Qualidade de Vida",
-        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para garantir qualidade de vida e cobertura de saúde ao longo dos anos.`,
+        descricao: `Acumular ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para cobrir despesas com saúde e bem-estar.`,
         insight: status === "viavel"
-          ? `Plano viável — valor projetado: ${brl(projecao.at(-1)?.totalReal)}.`
+          ? `Plano viável — projetado: ${brl(projecao.at(-1)?.totalReal)}.`
           : `Ajuste necessário — veja as Estratégias.`,
       },
       sucessaoPatrimonial: {
         headline: "Sucessão Patrimonial",
-        descricao: `Estruturar ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para transmissão eficiente do patrimônio, protegendo a família com mínima carga tributária.`,
+        descricao: `Estruturar ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para transmissão eficiente do patrimônio, com mínima carga tributária.`,
         insight: `Horizonte de ${prazo} anos para estruturar instrumentos sucessórios com máxima eficiência fiscal.`,
+      },
+      seguros: {
+        headline: "Proteção — Seguro de Vida e Veículos",
+        descricao: `Reservar ${brl(meta)}/ano em prêmios para seguros de vida e de veículos, blindando o patrimônio e a renda da família contra eventos graves.`,
+        insight: status === "viavel"
+          ? `Orçamento de proteção no caminho certo — ${brl(aporte)}/mês cobrem os prêmios planejados.`
+          : `Ajuste o orçamento de prêmios — proteção subdimensionada expõe o patrimônio. Veja as Estratégias.`,
+      },
+      planoSaude: {
+        headline: "Plano de Saúde",
+        descricao: `Provisionar ${brl(meta)} em ${prazo} ${prazo === 1 ? "ano" : "anos"} para custear o plano de saúde e coberturas complementares da família.`,
+        insight: status === "viavel"
+          ? `Provisão no caminho certo — ${brl(aporte)}/mês bancam as mensalidades e reajustes.`
+          : `O custo do plano tende a crescer acima da inflação — revise o aporte nas Estratégias.`,
       },
     };
 
@@ -914,28 +958,28 @@ export default function ObjetivoDetalhes() {
               titulo: "Alocação Estratégica de Ativos",
               subtitulo: "Eficiência de Retorno",
               cor: "#F0A202",
-              descricao: "A composição da carteira de investimentos é o principal determinante do retorno real de longo prazo. Uma alocação estruturada e alinhada ao horizonte temporal pode incrementar a rentabilidade real em 2 a 4 pontos percentuais ao ano sem elevação proporcional do risco.",
+              descricao: "A composição da carteira é o principal determinante do retorno real no longo prazo — uma alocação bem estruturada pode somar 2 a 4 p.p. ao ano sem elevar proporcionalmente o risco.",
               itens: [
-                "Tesouro IPCA+: núcleo da carteira com rentabilidade real garantida pelo governo federal, protegendo o poder de compra ao longo de décadas",
-                "PGBL com tabela regressiva: dedução de até 12% da renda bruta anual no IR gera liquidez imediata reinvestível, potencializando o efeito dos juros compostos",
-                "Fundos Imobiliários de tijolo: renda mensal isenta de IR para pessoa física com histórico de rendimento real positivo consistente no longo prazo",
-                "Ações com crescimento histórico de dividendos: proteção estrutural contra inflação e crescimento real do patrimônio ao longo do horizonte de acumulação",
-                "LCI e LCA de alta qualidade: camada de liquidez isenta de IR para rebalanceamentos periódicos da carteira sem impacto tributário sobre o movimento"
+                "Tesouro IPCA+: núcleo da carteira com rentabilidade real garantida, protegendo o poder de compra",
+                "PGBL regressivo: dedução de até 12% da renda bruta gera liquidez reinvestível e potencializa juros compostos",
+                "FIIs de tijolo: renda mensal isenta de IR com histórico de rendimento real positivo no longo prazo",
+                "Ações pagadoras de dividendos: proteção contra inflação e crescimento real do patrimônio",
+                "LCI/LCA: liquidez isenta de IR para rebalanceamentos periódicos sem impacto tributário"
               ]
             },
             {
               numero: "04",
               codigo: "TR",
-              titulo: "Eficiência Tributária como Alavanca de Rentabilidade",
+              titulo: "Eficiência Tributária",
               subtitulo: "Planejamento Fiscal",
               cor: "#22c55e",
-              descricao: "Reduzir a alíquota efetiva de IR sobre os rendimentos equivale a um incremento direto na rentabilidade líquida sem necessidade de maior exposição ao risco. Um planejamento tributário bem estruturado pode representar 1 a 3 pontos percentuais adicionais de retorno líquido ao ano.",
+              descricao: "Reduzir a alíquota efetiva de IR equivale a ganho direto de rentabilidade líquida, sem maior risco — pode somar 1 a 3 p.p. de retorno ao ano.",
               itens: [
-                "VGBL com tabela regressiva: alíquota de IR sobre rendimentos reduzida de 35% para 10% após 10 anos de acumulação — menor tributação disponível no sistema tributário brasileiro",
-                "Investimentos isentos de IR: LCI, LCA, dividendos de ações, rendimentos de FIIs e CRI/CRA compõem a camada fiscalmente mais eficiente da carteira",
-                "Compensação de perdas em renda variável: estratégia fiscal anual para abater prejuízos de operações anteriores na base tributável de ganhos futuros",
-                "Análise anual do modelo de declaração: a comparação entre modelo completo e simplificado pode representar diferença relevante na restituição e no fluxo de caixa disponível",
-                "Estruturação dos resgates previdenciários: planejar os resgates na fase de distribuição para manter o menor enquadramento de alíquota possível ao longo dos anos"
+                "VGBL regressivo: IR sobre rendimentos cai de 35% para 10% após 10 anos — a menor tributação do sistema",
+                "Ativos isentos: LCI, LCA, dividendos, FIIs e CRI/CRA formam a camada fiscalmente mais eficiente",
+                "Compensação de perdas em renda variável: abate prejuízos anteriores de ganhos futuros",
+                "Revisão anual do modelo de declaração: completo vs. simplificado pode mudar o resultado",
+                "Planejamento de resgates previdenciários: mantém a menor alíquota possível na distribuição"
               ]
             }
           ];
@@ -954,14 +998,13 @@ export default function ObjetivoDetalhes() {
               titulo: "Consórcio Automotivo",
               subtitulo: "Menor Custo Total",
               cor: "#FF6B35",
-              descricao: "O consórcio automotivo é o instrumento de menor custo para aquisição de veículos a prazo. A ausência de juros elimina o efeito exponencial negativo do financiamento tradicional, especialmente relevante em prazos superiores a 24 meses.",
+              descricao: "Instrumento de menor custo para aquisição a prazo — sem juros, apenas taxa de administração. Economia de 20% a 40% vs. financiamento.",
               destaque: `Parcela estimada: ${brl(parcelaConsorcio)}/mês por ${prazoConsorcio * 12} meses`,
               itens: [
-                `Crédito de ${brl(meta)} com taxa de administração de aproximadamente 1,5% sobre o valor total, sem incidência de juros sobre o capital`,
-                "Ausência de juros representa economia de 20% a 40% em relação ao custo total do financiamento bancário para o mesmo prazo contratado",
-                "Lance com recursos próprios viabiliza contemplação antecipada em qualquer mês do contrato, independentemente do resultado do sorteio mensal",
-                "Verifique o histórico de contemplações por sorteio do grupo — grupos mais antigos tendem a apresentar maior frequência de contemplação por maturidade",
-                "Confirme o registro da administradora no Banco Central e avalie o histórico operacional antes da adesão ao grupo consorcial"
+                `${brl(meta)} de crédito com taxa de administração de ~1,5%, sem juros sobre o capital`,
+                "Lance próprio antecipa a contemplação a qualquer mês, independente do sorteio",
+                "Verifique o histórico de contemplações do grupo — grupos mais antigos contemplam mais",
+                "Confirme o registro da administradora no Banco Central antes de aderir"
               ]
             },
             {
@@ -970,14 +1013,14 @@ export default function ObjetivoDetalhes() {
               titulo: "Financiamento com Análise de CET",
               subtitulo: "Aquisição Imediata",
               cor: "#2274A5",
-              descricao: "O financiamento bancário oferece disponibilidade imediata do veículo, porém o Custo Efetivo Total (CET) pode representar entre 20% e 80% do valor do bem em encargos financeiros. Análise criteriosa é indispensável antes da assinatura do contrato.",
-              destaque: `Entrada: ${brl(entrada)} + parcela estimada: ${brl(parcelaFin)}/mês (60x)`,
+              descricao: "Disponibilidade imediata, mas o CET pode somar 20% a 80% do valor do bem em encargos. Análise criteriosa é indispensável.",
+              destaque: `Entrada: ${brl(entrada)} + ${brl(parcelaFin)}/mês (60x)`,
               itens: [
-                "Custo Efetivo Total (CET): compare sempre o CET anual entre bancos, financeiras e montadoras — a taxa nominal subestima o custo real do crédito contratado",
-                "Entrada recomendada pelo CFP: mínimo de 20% a 30% do valor do veículo, reduzindo o prazo e o custo total dos juros ao longo do contrato",
-                "Débito automático na mesma instituição do salário reduz a taxa de juros contratada em média 0,3% a 0,5% ao mês sobre o saldo devedor",
-                "Modalidade CDC: verifique a possibilidade de liquidação antecipada com abatimento proporcional de juros, direito garantido pelo Código de Defesa do Consumidor",
-                "Evite prazos superiores a 48 meses em veículos: a depreciação do bem supera com frequência o saldo devedor, criando desequilíbrio patrimonial desfavorável"
+                "Compare sempre o CET anual entre bancos, financeiras e montadoras — a taxa nominal engana",
+                "Entrada recomendada: 20% a 30% do valor — reduz prazo e juros totais",
+                "Débito automático na instituição do salário reduz 0,3% a 0,5% a.m. na taxa",
+                "CDC: exerça o direito à liquidação antecipada com abatimento proporcional de juros",
+                "Evite prazos acima de 48 meses — depreciação tende a superar o saldo devedor"
               ]
             }
           ];
@@ -997,30 +1040,29 @@ export default function ObjetivoDetalhes() {
               titulo: "Consórcio Imobiliário",
               subtitulo: "Menor Custo Total",
               cor: "#8AC926",
-              descricao: "O consórcio imobiliário é o instrumento de menor Custo Efetivo Total (CET) para aquisição de imóveis a prazo. Sem incidência de juros e com apenas taxa de administração, a economia em relação ao financiamento bancário pode superar 40% do valor total do bem.",
+              descricao: "Menor CET para aquisição a prazo — sem juros, apenas taxa de administração. Economia vs. financiamento pode superar 40% do valor do bem.",
               destaque: `Parcela estimada: ${brl(parcelaConsorcioIm)}/mês por ${prazoConsorcioIm} anos`,
               itens: [
-                `Crédito de ${brl(meta)} com taxa de administração de aproximadamente 2% sobre o crédito total, sem incidência de juros sobre o capital`,
-                "Economia em relação ao financiamento bancário: entre 30% e 50% do valor total do imóvel ao longo do prazo, dependendo da taxa vigente na contratação",
-                "FGTS pode ser utilizado como oferta de lance para contemplação antecipada, reduzindo significativamente o tempo de espera pelo crédito",
-                "Contemplação por lance livre: o cotista planeja estrategicamente o momento de obtenção do crédito, com maior controle que o sorteio convencional",
-                "Avalie o rating ABAC e o histórico de contemplações da administradora escolhida — solidez operacional é critério essencial na seleção"
+                `${brl(meta)} de crédito com taxa de administração de ~2%, sem juros sobre o capital`,
+                "FGTS pode ser usado como lance para contemplação antecipada",
+                "Lance livre: controla estrategicamente o momento do crédito",
+                "Avalie rating ABAC e histórico de contemplações da administradora"
               ]
             },
             {
               numero: "04",
               codigo: "FI",
               titulo: "Financiamento Imobiliário",
-              subtitulo: "Análise de Custo de Oportunidade",
+              subtitulo: "Custo de Oportunidade",
               cor: "#1982C4",
-              descricao: "O financiamento imobiliário permite a aquisição antecipada do bem, mas exige análise rigorosa do Custo Efetivo Total (CET) e da decisão de oportunidade: o custo real do financiamento comparado ao retorno do capital não desembolsado mantido investido.",
-              destaque: `Entrada estimada: ${brl(entradaIm)} + parcela: ${brl(parcelaFinIm)}/mês (360x)`,
+              descricao: "Aquisição imediata, mas exige análise rigorosa do CET e do custo de oportunidade (vs. manter capital investido).",
+              destaque: `Entrada: ${brl(entradaIm)} + ${brl(parcelaFinIm)}/mês (360x)`,
               itens: [
-                "Custo Efetivo Total (CET): compare sempre o CET entre Caixa, bancos privados e cooperativas de crédito — a taxa nominal subestima o custo real da operação",
-                "FGTS: utilizável como entrada e em amortizações anuais — cada amortização extraordinária reduz o saldo devedor e os juros totais do contrato de forma relevante",
-                "Tabela SAC versus Price: a tabela SAC resulta em menor custo total de juros e é recomendada quando há capacidade de pagamento inicial maior nos primeiros anos",
-                "Portabilidade de crédito: direito legal do mutuário de transferir o financiamento para instituição com taxa inferior após a contratação, sem penalidade",
-                "Análise de oportunidade: mantenha capital excedente em Tesouro IPCA+ enquanto financia — o spread pode ser positivo a depender das taxas vigentes no momento"
+                "Compare o CET entre Caixa, bancos privados e cooperativas — a taxa nominal engana",
+                "FGTS: use como entrada e em amortizações anuais para derrubar o saldo",
+                "Tabela SAC é mais barata que Price — exige capacidade de pagamento maior no início",
+                "Portabilidade de crédito: troque de banco por taxa menor, sem penalidade",
+                "Capital excedente em Tesouro IPCA+ pode render mais que o custo do financiamento"
               ]
             }
           ];
@@ -1031,31 +1073,167 @@ export default function ObjetivoDetalhes() {
             {
               numero: "03",
               codigo: "PP",
-              titulo: "Previdência Privada como Instrumento Sucessório",
-              subtitulo: "Planejamento Tributário e Sucessório",
+              titulo: "Previdência Privada Sucessória",
+              subtitulo: "Tributário e Sucessório",
               cor: "#6A4C93",
-              descricao: "A previdência privada é o instrumento mais eficiente do mercado brasileiro para planejamento sucessório: não integra o inventário, transmite capital ao beneficiário com liquidez em até 30 dias e oferece benefício tributário expressivo nas fases de acumulação e distribuição.",
+              descricao: "Instrumento mais eficiente para sucessão no Brasil: fora do inventário, liquidez em até 30 dias para o beneficiário e forte vantagem tributária.",
               itens: [
-                "Não integra o inventário: capital transmitido ao beneficiário em até 30 dias, sem ITCMD em muitos estados, sem bloqueio judicial e sem custos advocatícios de abertura",
-                "PGBL: dedução de até 12% da renda bruta tributável anual no IR — instrumento de eficiência tributária com impacto imediato e reinvestível no fluxo de caixa",
-                "Tabela regressiva: alíquota de IR sobre os rendimentos reduzida de 35% para 10% após 10 anos de acumulação — menor tributação disponível no sistema tributário brasileiro",
-                "VGBL: tributação exclusiva sobre o rendimento (não sobre o total acumulado), indicado como complemento ao PGBL ou para contribuintes do modelo simplificado",
-                "Proteção patrimonial: decisões jurídicas recentes têm reconhecido a impenhorabilidade da previdência privada em processos de execução, preservando o patrimônio familiar"
+                "Fora do inventário: capital transmitido em até 30 dias, sem bloqueio judicial, sem ITCMD em muitos estados",
+                "PGBL: dedução de até 12% da renda bruta tributável no IR — impacto imediato no fluxo de caixa",
+                "Tabela regressiva: IR sobre rendimentos cai de 35% para 10% após 10 anos",
+                "VGBL: tributa apenas o rendimento, ideal como complemento ao PGBL",
+                "Decisões recentes reconhecem impenhorabilidade em execuções, protegendo a família"
               ]
             },
             {
               numero: "04",
               codigo: "SV",
               titulo: "Seguro de Vida com Capital Relevante",
-              subtitulo: "Proteção e Liquidez Imediata",
+              subtitulo: "Proteção e Liquidez",
               cor: "#1982C4",
-              descricao: "O seguro de vida com capital expressivo é o único instrumento financeiro que cria patrimônio imediato independente do acumulado. Para planejamento sucessório de alto patrimônio, funciona como mecanismo de liquidez instantânea, viabilizando o pagamento do ITCMD e dos custos do inventário sem necessidade de venda forçada de ativos.",
+              descricao: "Cria patrimônio imediato independente do acumulado — viabiliza ITCMD e custos de inventário sem venda forçada de ativos.",
               itens: [
-                "Indenização isenta de Imposto de Renda para beneficiários, conforme Art. 794 do Código Civil e regulamentação da SUSEP — benefício tributário relevante na transmissão",
-                "Transmissão extrajudicial e direta: capital pago ao beneficiário cadastrado sem necessidade de abertura de inventário, com liquidez imediata para a família",
-                "Capital segurado adequado ao planejamento: a prática CFP recomenda cobertura de 10 a 20 vezes a renda anual, suficiente para manter o padrão de vida por 5 a 10 anos sem redução patrimonial",
-                "Coberturas complementares de alto valor: invalidez permanente por acidente ou doença, diagnóstico de doenças graves (câncer, infarto, AVC) e diária de internação hospitalar",
-                "Liquidez estratégica no inventário: o capital pode financiar o pagamento do ITCMD (imposto estadual sobre herança), evitando venda forçada de imóveis ou participações societárias"
+                "Indenização isenta de IR (Art. 794 CC) — transmissão direta ao beneficiário",
+                "Sem inventário: pagamento direto ao beneficiário cadastrado, liquidez imediata",
+                "Cobertura recomendada: 10 a 20x a renda anual, mantendo padrão de vida da família",
+                "Coberturas extras: invalidez, doenças graves (câncer, infarto, AVC), diária hospitalar",
+                "Liquidez para o ITCMD, evitando venda forçada de imóveis ou participações"
+              ]
+            }
+          ];
+
+        case "liquidez":
+          return [
+            {
+              numero: "03",
+              codigo: "RE",
+              titulo: "Composição da Reserva de Emergência",
+              subtitulo: "Liquidez e Segurança",
+              cor: "#4ADE80",
+              descricao: "Reserva deve priorizar liquidez diária e preservação de capital — rentabilidade é secundária. Recomendação: 6 a 12 meses de custo de vida.",
+              itens: [
+                "Tesouro Selic: liquidez em D+1, risco soberano e rendimento próximo da taxa básica",
+                "CDB de liquidez diária em banco grande, com FGC até R$ 250 mil por CPF/instituição",
+                "Fundos DI com taxa baixa (até ~0,3% a.a.) e resgate em D+0 ou D+1",
+                "Evite LCI/LCA nesta reserva — carência compromete a liquidez imediata",
+                "Divida entre 2 a 3 instituições distintas para reduzir risco operacional"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "DS",
+              titulo: "Dimensionamento da Reserva",
+              subtitulo: "Quanto Manter",
+              cor: "#22c55e",
+              descricao: "O tamanho ideal depende da estabilidade da renda, composição familiar e dependentes. CLT estável: 6 meses. Autônomo/PJ: 12 meses ou mais.",
+              itens: [
+                "Base de cálculo: custo fixo mensal essencial (não a renda) — moradia, alimentação, saúde, educação",
+                "CLT estável: 6 meses de despesas como mínimo",
+                "Autônomo, PJ ou renda variável: 9 a 12 meses pela volatilidade do fluxo",
+                "Revise anualmente ou após mudanças grandes (casamento, filho, troca de emprego)",
+                "Depois de atingida, redirecione novos aportes para objetivos de crescimento"
+              ]
+            }
+          ];
+
+        case "oportunidade":
+          return [
+            {
+              numero: "03",
+              codigo: "RO",
+              titulo: "Capital Tático para Oportunidades",
+              subtitulo: "Liquidez Estratégica",
+              cor: "#06B6D4",
+              descricao: "Reserva separada da emergência — objetivo é capturar quedas de mercado, ativos descontados ou negócios pontuais. Líquida, mas com horizonte tático.",
+              itens: [
+                "Tesouro Selic e CDB liquidez diária: base para movimentação rápida quando surgir oportunidade",
+                "Dimensionamento: 5% a 15% do patrimônio líquido, conforme perfil e convicção",
+                "Mantenha separada da reserva de emergência — funções e gatilhos distintos",
+                "Defina critérios objetivos para uso (queda X% do índice, múltiplo descontado, evento)",
+                "Evite alocar em ativos voláteis — a oportunidade exige liquidez no momento certo"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "GE",
+              titulo: "Regras de Uso e Recomposição",
+              subtitulo: "Disciplina de Execução",
+              cor: "#22c55e",
+              descricao: "Sem regras claras, a reserva vira gasto ou ansiedade. Critério documentado separa decisão racional de impulso.",
+              itens: [
+                "Documente gatilhos de entrada antes da oportunidade aparecer — evita viés emocional",
+                "Use em tranches (1/3, 1/3, 1/3) em vez de tudo de uma vez quando a queda se aprofundar",
+                "Defina teto de uso por oportunidade — não concentre todo o capital em um único ativo",
+                "Recomponha a reserva após uso com aportes dedicados até voltar ao dimensionamento",
+                "Reveja critérios e tamanho da reserva uma vez por ano"
+              ]
+            }
+          ];
+
+        case "seguros":
+          return [
+            {
+              numero: "03",
+              codigo: "SV",
+              titulo: "Seguro de Vida",
+              subtitulo: "Proteção da Renda Familiar",
+              cor: "#EF4444",
+              descricao: "Protege a renda da família no caso de morte ou invalidez do provedor — referência: 10 a 20x a renda anual do titular.",
+              itens: [
+                "Capital segurado: 10 a 20x a renda anual permite 5 a 10 anos de padrão de vida mantido",
+                "Coberturas extras: invalidez por acidente/doença, doenças graves (câncer, AVC, infarto), diária hospitalar",
+                "Indenização é isenta de IR para beneficiários (Art. 794 CC) e não entra no inventário",
+                "Reveja capital a cada evento relevante — casamento, filho, novo imóvel financiado",
+                "Compare prêmios anualmente — concorrência do mercado costuma reduzir custo da renovação"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "SA",
+              titulo: "Seguro de Veículos",
+              subtitulo: "Proteção Patrimonial",
+              cor: "#FF6B35",
+              descricao: "Protege patrimônio (veículo, terceiros) contra eventos de alto impacto financeiro. Franquia e coberturas determinam o prêmio.",
+              itens: [
+                "Cobertura de terceiros (RCF): fundamental — danos a terceiros podem superar o valor do veículo",
+                "Escolha franquia compatível com o caixa — franquia alta derruba o prêmio, mas exige liquidez no sinistro",
+                "Coberturas adicionais: vidros, carro reserva, assistência 24h — avalie custo-benefício",
+                "Perfil (garagem, kilometragem, condutor) impacta o prêmio — mantenha dados atualizados",
+                "Cote ao menos 3 seguradoras todo ano na renovação — diferenças de 20% a 40% são comuns"
+              ]
+            }
+          ];
+
+        case "planoSaude":
+          return [
+            {
+              numero: "03",
+              codigo: "PS",
+              titulo: "Escolha e Estrutura do Plano",
+              subtitulo: "Custo vs. Cobertura",
+              cor: "#EC4899",
+              descricao: "Plano de saúde é o segundo maior custo familiar depois da moradia. Estruturação correta reduz prêmio sem perder cobertura crítica.",
+              itens: [
+                "Avalie ao menos 3 operadoras e compare hospitais/médicos efetivamente usados pela família",
+                "Plano coletivo por adesão costuma ser mais barato que individual, mas tem reajuste menos regulado",
+                "Coparticipação reduz mensalidade, mas exige reserva para cobrir os eventos",
+                "Acomodação enfermaria vs. apartamento: diferença de 20% a 40% no prêmio",
+                "Cobertura geográfica (nacional/regional) — pague só pelo que a família usa"
+              ]
+            },
+            {
+              numero: "04",
+              codigo: "RJ",
+              titulo: "Reajustes e Previsibilidade",
+              subtitulo: "Custo de Longo Prazo",
+              cor: "#1982C4",
+              descricao: "Reajuste anual de planos historicamente supera IPCA em 3 a 6 p.p. — o orçamento precisa antecipar essa inflação setorial.",
+              itens: [
+                "Projete aportes crescendo ~10% a.a. — a inflação médica supera a geral",
+                "Faixa etária (a cada 5 anos) provoca reajustes adicionais, especialmente após os 59 anos",
+                "Avalie seguro saúde (reembolso) vs. plano de rede como alternativa em fases específicas",
+                "Para idosos, considere previdência privada dedicada para bancar a mensalidade",
+                "Revisão anual do contrato — reajuste abusivo pode ser contestado ou levado à ANS"
               ]
             }
           ];
@@ -1074,7 +1252,7 @@ export default function ObjetivoDetalhes() {
             Estratégias Personalizadas
           </div>
           <div style={{ fontSize: 13, color: T.textSecondary, lineHeight: 1.8 }}>
-            Baseado nos dados do seu objetivo e nas diretrizes técnicas do planejamento financeiro certificado (CFP),
+            Baseado nos dados do seu objetivo e nas melhores práticas de planejamento financeiro,
             mapeamos os caminhos mais eficientes para alcançar sua meta com o menor custo e maior previsibilidade.
           </div>
         </div>
@@ -1120,8 +1298,8 @@ export default function ObjetivoDetalhes() {
           cor="#22c55e"
           descricao={
             status === "viavel"
-              ? "O plano está no caminho certo. A consistência no aporte atual é suficiente para atingir a meta dentro do prazo estabelecido. Um incremento adicional amplia a margem de segurança e antecipa a conquista do seu objetivo."
-              : `Para alcançar ${brl(meta)} em ${prazo} anos mantendo a taxa de ${TAXA_ANUAL}% a.a., o aporte mensal necessário foi calculado abaixo. Esta é a rota mais direta para atingir seu objetivo no prazo original.`
+              ? "Plano no caminho certo. Incremento adicional amplia margem de segurança e antecipa a conquista do objetivo."
+              : `Para alcançar ${brl(meta)} em ${prazo} anos a ${TAXA_ANUAL}% a.a., o aporte necessário está abaixo — rota mais direta no prazo original.`
           }
           comparacao={status !== "viavel" ? {
             antes: { label: "Aporte Atual", valor: `${brl(aporte)}`, sub: "por mês" },
@@ -1132,12 +1310,12 @@ export default function ObjetivoDetalhes() {
           }}
           itens={[
             status !== "viavel"
-              ? `Aumento necessário: ${brl(aumentoNecessario)} adicionais por mês, correspondendo a ${percentualAumento}% acima do aporte atual`
-              : "Aporte atual dentro do planejamento — mantenha a consistência e realize revisões anuais para preservar o poder real de acumulação",
-            "Automatize os aportes via débito automático na data de recebimento do salário, eliminando o viés comportamental de postergação",
-            "Reajuste o aporte pelo IPCA anualmente para preservar o poder real de acumulação e não perder terreno para a inflação ao longo do prazo",
-            "Redirecione receitas extraordinárias integralmente ao objetivo: 13º salário, bônus, PLR e restituição de IR têm impacto desproporcional no longo prazo",
-            "A cada incremento de renda, comprometa ao menos 50% do aumento com o aporte — controle do lifestyle inflation é fator crítico validado pelo CFP"
+              ? `Aumento necessário: ${brl(aumentoNecessario)}/mês (+${percentualAumento}% sobre o aporte atual)`
+              : "Aporte dentro do planejamento — mantenha consistência e revisões anuais",
+            "Automatize o débito no dia do salário — elimina o viés de postergação",
+            "Reajuste o aporte pelo IPCA anualmente para preservar o poder de compra",
+            "Direcione 13º, bônus, PLR e restituição de IR integralmente ao objetivo",
+            "A cada aumento de renda, comprometa 50%+ do incremento com o aporte"
           ]}
         />
 
@@ -1149,10 +1327,10 @@ export default function ObjetivoDetalhes() {
           cor="#3b82f6"
           descricao={
             prazoEstendido && prazoEstendido <= prazo
-              ? `O plano está adiantado. Mantendo o aporte atual de ${brl(aporte)}/mês, a meta de ${brl(meta)} será atingida em ${prazoEstendido} anos — antes do prazo original. Nenhum ajuste é necessário.`
+              ? `Plano adiantado. Mantendo ${brl(aporte)}/mês, ${brl(meta)} em ${prazoEstendido} anos — antes do prazo original.`
               : prazoEstendido
-              ? `Mantendo o aporte atual de ${brl(aporte)}/mês sem qualquer alteração, calcule abaixo em quanto tempo você atingirá ${brl(meta)}. Um prazo maior potencializa o efeito dos juros compostos de forma não linear.`
-              : `Com o aporte atual, o objetivo levaria mais de 50 anos. A extensão de prazo isolada não resolve — o ajuste de aporte é indispensável.`
+              ? `Mantendo ${brl(aporte)}/mês, ${brl(meta)} é atingido no tempo abaixo — prazo maior potencializa os juros compostos.`
+              : `Com o aporte atual, o objetivo leva 50+ anos. Extensão isolada não resolve — ajuste de aporte é indispensável.`
           }
           comparacao={prazoEstendido ? {
             antes: { label: "Prazo Desejado", valor: `${prazo} anos`, sub: `aporte de ${brl(aporte)}/mês` },
@@ -1162,12 +1340,12 @@ export default function ObjetivoDetalhes() {
           } : null}
           itens={[
             prazoEstendido
-              ? `Com o aporte atual de ${brl(aporte)}/mês mantido sem alteração, ${brl(meta)} será atingido em ${prazoEstendido} anos`
-              : "Aporte atual insuficiente para qualquer horizonte razoável — o ajuste de contribuição mensal é a ação prioritária",
-            "Um prazo mais longo permite alocação maior em renda variável, historicamente superior à renda fixa em horizontes acima de 5 anos",
-            "Combine extensão de prazo com aumentos graduais de aporte — a convergência das duas alavancas é mais eficiente do que cada uma isolada",
-            "Defina marcos intermediários de patrimônio para monitoramento e comprometimento ao longo do horizonte de planejamento",
-            "O custo de adiar o início dos aportes é assimétrico: cada ano de postergação exige esforço de recuperação desproporcional nos anos seguintes"
+              ? `Mantendo ${brl(aporte)}/mês, ${brl(meta)} é atingido em ${prazoEstendido} anos`
+              : "Aporte insuficiente para qualquer horizonte razoável — ajustar contribuição é prioritário",
+            "Prazo maior permite mais renda variável, historicamente superior em horizontes 5+ anos",
+            "Combine extensão de prazo + aumento gradual de aporte — mais eficiente que cada uma isolada",
+            "Defina marcos intermediários de patrimônio para monitorar e manter o comprometimento",
+            "Adiar aportes tem custo assimétrico — cada ano de atraso exige esforço desproporcional depois"
           ]}
         />
 
@@ -1191,8 +1369,8 @@ export default function ObjetivoDetalhes() {
           color: T.textMuted,
           lineHeight: 1.8
         }}>
-          <span style={{ color: T.gold, fontWeight: 600, letterSpacing: "0.03em" }}>Nota do Assessor (CFP):</span>
-          {" "}As estratégias apresentadas são baseadas nos dados informados e nas diretrizes técnicas do CFP (Certified Financial Planner), certificação reconhecida internacionalmente como padrão de excelência no planejamento financeiro pessoal. Para a decisão mais adequada ao seu caso, considere também seu perfil de risco, necessidade de liquidez e situação fiscal atual.
+          <span style={{ color: T.gold, fontWeight: 600, letterSpacing: "0.03em" }}>Nota:</span>
+          {" "}As estratégias são baseadas nos dados informados e em boas práticas de planejamento financeiro. Para a decisão mais adequada ao seu caso, considere também seu perfil de risco, necessidade de liquidez e situação fiscal.
         </div>
       </div>
     );

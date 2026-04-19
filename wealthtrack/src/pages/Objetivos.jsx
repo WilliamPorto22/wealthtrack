@@ -13,11 +13,15 @@ const TAXA_ANUAL = 14;
 const TIPOS = [
   { id:"aposentadoria", label:"Aposentadoria e Liberdade Financeira" },
   { id:"imovel",        label:"Aquisição de Imóvel" },
-  { id:"carro",         label:"Comprar Carro" },
+  { id:"liquidez",      label:"Liquidez / Reserva de Emergência" },
+  { id:"carro",         label:"Comprar Veículo" },
+  { id:"oportunidade",  label:"Reserva de Oportunidade" },
   { id:"viagem",        label:"Viagens e Experiências" },
   { id:"educacao",      label:"Educação dos Filhos" },
   { id:"saude",         label:"Saúde e Qualidade de Vida" },
   { id:"sucessaoPatrimonial", label:"Sucessão Patrimonial" },
+  { id:"seguros",       label:"Seguro de Vida e de Veículos" },
+  { id:"planoSaude",    label:"Plano de Saúde" },
   { id:"personalizado", label:"Objetivo Personalizado" },
 ];
 
@@ -64,7 +68,7 @@ function brl(v) {
 function moedaStr(centavos) {
   const num = parseInt(String(centavos || "0").replace(/\D/g, "")) || 0;
   if (!num) return "";
-  return (num / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return (num / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function parseCentavos(str) {
@@ -90,11 +94,15 @@ const labelStatus = { viavel: "Viável", ajustavel: "Ajustável", inviavel: "Inv
 const coresPorTipo = {
   aposentadoria:       "#FFCA3A",
   imovel:              "#8AC926",
+  liquidez:            "#4ADE80",
   carro:               "#FF6B35",
+  oportunidade:        "#06B6D4",
   viagem:              "#5DD9C1",
   educacao:            "#2274A5",
   saude:               "#1982C4",
   sucessaoPatrimonial: "#6A4C93",
+  seguros:             "#EF4444",
+  planoSaude:          "#EC4899",
   personalizado:       "#00CC66",
 };
 
@@ -102,22 +110,30 @@ const coresPorTipo = {
 const gradientsPorTipo = {
   aposentadoria:       "linear-gradient(145deg, #2a1f00 0%, #3d2e00 60%, rgba(255,202,58,0.18) 100%)",
   imovel:              "linear-gradient(145deg, #0f2006 0%, #1a360a 60%, rgba(138,201,38,0.18) 100%)",
+  liquidez:            "linear-gradient(145deg, #012218 0%, #023826 60%, rgba(74,222,128,0.18) 100%)",
   carro:               "linear-gradient(145deg, #2a0e00 0%, #3d1800 60%, rgba(255,107,53,0.18) 100%)",
+  oportunidade:        "linear-gradient(145deg, #021e26 0%, #03313e 60%, rgba(6,182,212,0.18) 100%)",
   viagem:              "linear-gradient(145deg, #042522 0%, #0a3430 60%, rgba(93,217,193,0.18) 100%)",
   educacao:            "linear-gradient(145deg, #061c32 0%, #0d2a48 60%, rgba(34,116,165,0.18) 100%)",
   saude:               "linear-gradient(145deg, #041626 0%, #082238 60%, rgba(25,130,196,0.18) 100%)",
   sucessaoPatrimonial: "linear-gradient(145deg, #0c0820 0%, #160f30 60%, rgba(106,76,147,0.18) 100%)",
+  seguros:             "linear-gradient(145deg, #2a0a0a 0%, #3d1010 60%, rgba(239,68,68,0.18) 100%)",
+  planoSaude:          "linear-gradient(145deg, #2a0c1b 0%, #3d1026 60%, rgba(236,72,153,0.18) 100%)",
   personalizado:       "linear-gradient(145deg, #001f10 0%, #003218 60%, rgba(0,204,102,0.18) 100%)",
 };
 
 const emojisPorTipo = {
   aposentadoria: "🏖️",
   imovel: "🏠",
+  liquidez: "🛟",
   carro: "🚗",
+  oportunidade: "🎯",
   viagem: "✈️",
   educacao: "📚",
   saude: "💪",
   sucessaoPatrimonial: "👨‍👩‍👧‍👦",
+  seguros: "🛡️",
+  planoSaude: "❤️‍🩹",
   personalizado: "⭐"
 };
 
@@ -757,7 +773,7 @@ export default function Objetivos() {
                     placeholder="R$ 0"
                     type="text"
                     inputMode="numeric"
-                    value={form.rendaMensal ? (parseCentavos(form.rendaMensal)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0,maximumFractionDigits:0}) : ""}
+                    value={form.rendaMensal ? (parseCentavos(form.rendaMensal)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                     onChange={e => {
                       const centavos = parseCentavos(e.target.value) * 100;
                       setF("rendaMensal", String(centavos));
@@ -799,7 +815,7 @@ export default function Objetivos() {
                     placeholder="R$ 0"
                     type="text"
                     inputMode="numeric"
-                    value={form.meta ? (parseCentavos(form.meta)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0,maximumFractionDigits:0}) : ""}
+                    value={form.meta ? (parseCentavos(form.meta)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                     onChange={e => {
                       const centavos = parseCentavos(e.target.value) * 100;
                       setF("meta", String(centavos));
@@ -865,7 +881,7 @@ export default function Objetivos() {
             {patrimSource === "manual" ? (
               <div style={{ marginBottom:20 }}>
                 <input style={{ ...C.input, fontSize:16, padding:"14px 16px" }} placeholder="R$ 0" type="text" inputMode="numeric"
-                  value={form.patrimAtual ? (parseCentavos(form.patrimAtual)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0,maximumFractionDigits:0}) : ""}
+                  value={form.patrimAtual ? (parseCentavos(form.patrimAtual)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                   onChange={e => {
                     const centavos = parseCentavos(e.target.value) * 100;
                     setF("patrimAtual", String(centavos));
@@ -888,7 +904,7 @@ export default function Objetivos() {
             <div style={{ marginBottom:16 }}>
               <label style={C.label}>Aporte mensal destinado a este objetivo</label>
               <input style={{ ...C.input, fontSize:16, padding:"14px 16px" }} placeholder="R$ 0" type="text" inputMode="numeric"
-                value={form.aporte ? (parseCentavos(form.aporte)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:0,maximumFractionDigits:0}) : ""}
+                value={form.aporte ? (parseCentavos(form.aporte)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                 onChange={e => {
                   const centavos = parseCentavos(e.target.value) * 100;
                   setF("aporte", String(centavos));
