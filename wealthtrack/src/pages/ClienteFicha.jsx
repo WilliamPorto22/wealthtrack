@@ -746,8 +746,8 @@ export default function ClienteFicha() {
       const data={...formRef.current,segmento:seg||"",patrimonio:patFinal};
       if(id==="novo"){
         const ref=await addDoc(collection(db,"clientes"),data);
-        setMsg("Cliente salvo.");
-        setTimeout(()=>navigate(`/cliente/${ref.id}`),800);
+        setMsg("Cliente salvo — abrindo diagnóstico...");
+        setTimeout(()=>navigate(`/cliente/${ref.id}/diagnostico`),900);
       }else{
         await setDoc(doc(db,"clientes",id),data);
         savedDataRef.current={...data};
@@ -1151,11 +1151,25 @@ export default function ClienteFicha() {
 
         {/* ─── EDIT MODE ──────────────────────────────────────────── */}
         {modo==="editar"&&(
-          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:16,padding:"24px 20px"}}>
+          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:18,padding:"10px 22px 28px"}}>
+
+            {id==="novo"&&(
+              <div style={{marginTop:18,marginBottom:6,padding:"18px 20px",background:"linear-gradient(135deg,rgba(240,162,2,0.08),rgba(240,162,2,0.02))",border:"0.5px solid rgba(240,162,2,0.22)",borderRadius:14}}>
+                <div style={{fontSize:20,fontWeight:500,color:T.textPrimary,marginBottom:6,letterSpacing:"-0.01em"}}>
+                  Bem-vindo ao seu planejamento financeiro
+                </div>
+                <div style={{fontSize:12,color:T.textSecondary,lineHeight:1.6,letterSpacing:"0.01em"}}>
+                  Preencha os campos abaixo com calma. Quanto mais detalhes, mais preciso será o diagnóstico CFP ao final — campos obrigatórios estão marcados com <span style={{color:"#F0A202"}}>*</span>.
+                </div>
+              </div>
+            )}
+
+            {/* ═══ SEÇÃO 1: IDENTIFICAÇÃO ═══════════════════════════ */}
+            <SectionTitle icon="👤" subtitle="Como você se apresenta ao mundo">Identificação</SectionTitle>
 
             {/* Avatar */}
-            <div style={{marginBottom:24}}>
-              <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:12,...noEdit}}>Avatar</div>
+            <div style={{marginBottom:20}}>
+              <Lbl>Avatar</Lbl>
               <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
                 {AVATAR_OPTS.map(opt=>(
                   <div key={opt.key} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,cursor:"pointer",opacity:snap.avatar===opt.key?1:0.35,transition:"opacity 0.2s",...noEdit}} onClick={()=>setFSnap("avatar",opt.key)}>
@@ -1166,95 +1180,142 @@ export default function ClienteFicha() {
               </div>
             </div>
 
-            {/* Dados pessoais */}
-            <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>Dados Pessoais</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12}}>
               <div style={{gridColumn:"1/-1"}}>
-                <Lbl>Nome completo</Lbl>
-                <InputTexto key={`nome-${id}`} initValue={snap.nome} onCommit={v=>setFSnap("nome",v)} placeholder="Nome do cliente"/>
+                <Lbl>Nome completo <span style={{color:"#F0A202"}}>*</span></Lbl>
+                <InputTexto key={`nome-${id}`} initValue={snap.nome} onCommit={v=>setFSnap("nome",v)} placeholder="Como você gostaria de ser chamado"/>
               </div>
               <div>
-                <Lbl>Código do cliente</Lbl>
-                <InputTexto key={`cod-${id}`} initValue={snap.codigo} onCommit={v=>setF("codigo",v)}/>
+                <Lbl>Idade ou data de nascimento</Lbl>
+                <InputIdadeOuNasc key={`nasc-${id}`} initValue={snap.nascimento} onCommit={v=>setFSnap("nascimento",v)}/>
+                <div style={{fontSize:9,color:T.textMuted,marginTop:5,...noEdit}}>Ex: 42 · ou · 15/08/1983</div>
+              </div>
+              <div>
+                <Lbl>Telefone / WhatsApp</Lbl>
+                <InputTelefone key={`tel-${id}`} initValue={snap.telefone} onCommit={v=>setF("telefone",v)}/>
+              </div>
+              <div style={{gridColumn:"1/-1"}}>
+                <Lbl>E-mail</Lbl>
+                <InputTexto key={`email-${id}`} initValue={snap.email} onCommit={v=>setF("email",v)} type="email" placeholder="nome@email.com"/>
+              </div>
+              <div>
+                <Lbl>Código interno (opcional)</Lbl>
+                <InputTexto key={`cod-${id}`} initValue={snap.codigo} onCommit={v=>setF("codigo",v)} placeholder="Ex: CL-042"/>
               </div>
               <div>
                 <Lbl>Cliente desde</Lbl>
                 <InputTexto key={`desde-${id}`} initValue={snap.desde} onCommit={v=>setF("desde",v)} placeholder="jan/2023"/>
               </div>
-              <div>
-                <Lbl>Data de nascimento</Lbl>
-                <InputTexto key={`nasc-${id}`} initValue={snap.nascimento} onCommit={v=>setFSnap("nascimento",v)} placeholder="DD/MM/AAAA"/>
+            </div>
+
+            {/* ═══ SEÇÃO 2: FAMÍLIA ═════════════════════════════════ */}
+            <SectionTitle icon="👨‍👩‍👧‍👦" subtitle="Entender a família ajuda a pensar em sucessão, seguros e educação">Família</SectionTitle>
+
+            <div style={{marginBottom:16}}>
+              <Lbl>Estado civil</Lbl>
+              <PillChoice value={snap.estadoCivil} onChange={v=>setFSnap("estadoCivil",v)} options={ESTADO_CIVIL}/>
+            </div>
+
+            {(snap.estadoCivil==="Casado(a)"||snap.estadoCivil==="União Estável")&&(
+              <div style={{marginBottom:16}}>
+                <Lbl>Nome do(a) cônjuge</Lbl>
+                <InputTexto key={`conj-${id}`} initValue={snap.conjuge} onCommit={v=>setF("conjuge",v)} placeholder="Nome completo do(a) cônjuge"/>
               </div>
-              <div>
-                <Lbl>E-mail</Lbl>
-                <InputTexto key={`email-${id}`} initValue={snap.email} onCommit={v=>setF("email",v)} type="email"/>
+            )}
+
+            <div style={{marginBottom:16}}>
+              <Lbl>Tem filhos?</Lbl>
+              <PillChoice value={snap.temFilhos} onChange={v=>setFSnap("temFilhos",v)} options={["Sim","Não"]}/>
+            </div>
+
+            {snap.temFilhos==="Sim"&&(
+              <div style={{marginBottom:12}}>
+                {(snap.filhos||[]).map((f,i)=>(
+                  <div key={i} style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:12,padding:"14px",marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <div style={{fontSize:10,color:"#a78bfa",textTransform:"uppercase",letterSpacing:"0.1em",...noEdit}}>Filho(a) {i+1}</div>
+                      <button onClick={()=>removerFilho(i)} style={{padding:"4px 10px",background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Remover</button>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
+                      <div>
+                        <Lbl>Nome</Lbl>
+                        <InputTexto key={`fi-n-${i}`} initValue={f.nome||""} onCommit={v=>atualizarFilho(i,"nome",v)} placeholder="Nome do filho(a)"/>
+                      </div>
+                      <div>
+                        <Lbl>Idade</Lbl>
+                        <InputTexto key={`fi-i-${i}`} initValue={f.idade||""} onCommit={v=>atualizarFilho(i,"idade",v)} placeholder="Ex: 8"/>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={adicionarFilho} style={{padding:"10px 16px",background:"rgba(168,139,250,0.06)",border:"0.5px solid rgba(168,139,250,0.25)",borderRadius:9,color:"#a78bfa",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em"}}>
+                  + Adicionar filho(a)
+                </button>
               </div>
+            )}
+
+            {/* ═══ SEÇÃO 3: LOCALIZAÇÃO & PERFIL ═════════════════════ */}
+            <SectionTitle icon="📍" subtitle="Onde mora e como se identifica no dia-a-dia">Localização e Perfil</SectionTitle>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12}}>
               <div>
-                <Lbl>Telefone</Lbl>
-                <InputTexto key={`tel-${id}`} initValue={snap.telefone} onCommit={v=>setF("telefone",v)} placeholder="(51) 99999-9999"/>
-              </div>
-              <div>
-                <Lbl>Estado (UF)</Lbl>
+                <Lbl>Estado</Lbl>
                 <CustomSelect value={snap.uf} onChange={v=>setFSnap("uf",v)} options={ESTADOS_BRASIL} placeholder="Selecione o estado"/>
               </div>
               <div>
+                <Lbl>Cidade</Lbl>
+                <InputTexto key={`cid-${id}`} initValue={snap.cidade} onCommit={v=>setF("cidade",v)} placeholder="Digite a cidade"/>
+              </div>
+              <div>
                 <Lbl>Profissão</Lbl>
-                <CustomSelect value={snap.profissao} onChange={v=>setFSnap("profissao",v)} options={PROFISSOES}/>
+                <CustomSelect value={snap.profissao} onChange={v=>setFSnap("profissao",v)} options={PROFISSOES} placeholder="Selecione a profissão"/>
               </div>
               <div>
-                <Lbl>Hobby / Interesse</Lbl>
-                <CustomSelect value={snap.hobby} onChange={v=>setFSnap("hobby",v)} options={HOBBIES}/>
-              </div>
-              <div>
-                <Lbl>Modelo de cobrança</Lbl>
-                <button
-                  type="button"
-                  onClick={()=>setFSnap("feeBased",!snap.feeBased)}
-                  style={{
-                    width:"100%",padding:"13px 16px",
-                    background:snap.feeBased?"rgba(34,197,94,0.12)":"rgba(255,255,255,0.04)",
-                    border:snap.feeBased?"0.5px solid rgba(34,197,94,0.40)":"0.5px solid rgba(62,92,118,0.40)",
-                    borderRadius:14,fontSize:14,
-                    color:snap.feeBased?"#22c55e":"#3E5C76",
-                    cursor:"pointer",fontFamily:"inherit",textAlign:"left",
-                    display:"flex",alignItems:"center",justifyContent:"space-between",
-                  }}
-                >
-                  <span>{snap.feeBased?"Fee Based ativo":"Não é Fee Based"}</span>
-                  <span style={{fontSize:10,padding:"2px 8px",borderRadius:20,
-                    background:snap.feeBased?"rgba(34,197,94,0.18)":"rgba(62,92,118,0.18)",
-                    color:snap.feeBased?"#22c55e":"#3E5C76",
-                  }}>{snap.feeBased?"SIM":"NÃO"}</span>
-                </button>
+                <Lbl>Hobbies / Interesses <span style={{color:T.textMuted}}>(múltipla escolha)</span></Lbl>
+                <MultiSelect values={snap.hobbies||[]} onChange={v=>setFSnap("hobbies",v)} options={HOBBIES} placeholder="Selecione um ou mais hobbies"/>
               </div>
             </div>
 
-            {/* Financeiro */}
-            <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>Dados Financeiros</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:20}}>
+            {/* ═══ SEÇÃO 4: DADOS FINANCEIROS ═════════════════════════ */}
+            <SectionTitle icon="💰" subtitle="Fotografia do fluxo financeiro mensal">Renda, Gastos e Aportes</SectionTitle>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:12}}>
               <div>
-                <Lbl>Salário / Renda mensal</Lbl>
+                <Lbl>Renda / Salário médio mensal</Lbl>
                 <InputMoeda key={`sal-${id}`} initValue={snap.salarioMensal} onCommit={v=>setFSnap("salarioMensal",v)}/>
               </div>
               <div>
-                <Lbl>Despesas mensais</Lbl>
+                <Lbl>Gastos médios mensais</Lbl>
                 <InputMoeda key={`gasp-${id}`} initValue={snap.gastosMensaisManual||String(Math.round(gastosSync*100))} onCommit={v=>setFSnap("gastosMensaisManual",v)}/>
+              </div>
+              <div>
+                <Lbl>Aporte médio que tem feito</Lbl>
+                <InputMoeda key={`apmed-${id}`} initValue={snap.aporteMedio} onCommit={v=>setFSnap("aporteMedio",v)}/>
               </div>
               <div>
                 <Lbl>Meta de aporte mensal</Lbl>
                 <InputMoeda key={`meta-${id}`} initValue={snap.metaAporteMensal} onCommit={v=>setFSnap("metaAporteMensal",v)}/>
               </div>
-              <div>
-                <Lbl>Patrimônio total (manual)</Lbl>
-                <InputMoeda key={`pat-${id}`} initValue={snap.patrimonio} onCommit={v=>setFSnap("patrimonio",v)}/>
-                <div style={{fontSize:9,color:T.textMuted,marginTop:4,...noEdit}}>Preenchido automaticamente se imóveis/carteira estiverem cadastrados</div>
+              <div style={{gridColumn:"1/-1"}}>
+                <Lbl>Dia do mês em que costuma aportar <span style={{color:T.textMuted}}>(usaremos para lembrar de contatá-lo)</span></Lbl>
+                <CustomSelect value={snap.diaAporte} onChange={v=>setFSnap("diaAporte",v)} options={DIAS_MES} placeholder="Selecione o dia do mês"/>
               </div>
             </div>
 
-            {/* Imóveis */}
-            <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>Patrimônio Imobiliário</div>
+            {/* ═══ SEÇÃO 5: PATRIMÔNIO FINANCEIRO ═════════════════════ */}
+            <SectionTitle icon="📊" subtitle="Investimentos que você já possui">Patrimônio Financeiro</SectionTitle>
+
+            <div style={{marginBottom:16}}>
+              <Lbl>Patrimônio financeiro total (manual)</Lbl>
+              <InputMoeda key={`pat-${id}`} initValue={snap.patrimonio} onCommit={v=>setFSnap("patrimonio",v)}/>
+              <div style={{fontSize:10,color:T.textMuted,marginTop:6,...noEdit}}>Preenchido automaticamente depois, quando cadastrar a carteira em detalhe</div>
+            </div>
+
+            {/* ═══ SEÇÃO 6: PATRIMÔNIO IMOBILIÁRIO ═════════════════════ */}
+            <SectionTitle icon="🏡" subtitle="Imóveis em seu nome — casa, apartamento, terreno, comercial">Patrimônio Imobiliário</SectionTitle>
+
             {(snap.imoveis||[]).length===0&&(
-              <div style={{fontSize:12,color:T.textMuted,marginBottom:12,padding:"12px 0",...noEdit}}>Nenhum imóvel cadastrado.</div>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:10,padding:"10px 0",...noEdit}}>Nenhum imóvel cadastrado ainda.</div>
             )}
             {(snap.imoveis||[]).map((im,i)=>(
               <div key={i} style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:12,padding:"14px",marginBottom:12}}>
@@ -1262,13 +1323,13 @@ export default function ClienteFicha() {
                   <div style={{fontSize:10,color:"#22c55e",textTransform:"uppercase",letterSpacing:"0.1em",...noEdit}}>Imóvel {i+1}</div>
                   <button onClick={()=>removerImovel(i)} style={{padding:"4px 10px",background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.2)",borderRadius:7,color:"#ef4444",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Remover</button>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10,marginBottom:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10}}>
                   <div>
                     <Lbl>Tipo de imóvel</Lbl>
                     <CustomSelect value={im.tipo} onChange={v=>atualizarImovel(i,"tipo",v)} options={TIPOS_IMOVEL}/>
                   </div>
                   <div>
-                    <Lbl>Nome / Identificação</Lbl>
+                    <Lbl>Identificação (opcional)</Lbl>
                     <InputTexto key={`im-nome-${i}`} initValue={im.nome||""} onCommit={v=>atualizarImovel(i,"nome",v)} placeholder="Ex: Casa principal"/>
                   </div>
                   <div>
@@ -1276,20 +1337,21 @@ export default function ClienteFicha() {
                     <input type="number" min="1" max="99" value={im.quantidade||1} onChange={e=>atualizarImovel(i,"quantidade",Math.max(1,parseInt(e.target.value)||1))} style={{...C.input,width:"100%"}}/>
                   </div>
                   <div>
-                    <Lbl>Valor (R$)</Lbl>
+                    <Lbl>Valor aproximado (R$)</Lbl>
                     <CustomSelect value={im.faixa} onChange={v=>atualizarImovel(i,"faixa",v)} options={FAIXAS_IMOVEL.map(f=>f.label)}/>
                   </div>
                 </div>
               </div>
             ))}
-            <button onClick={adicionarImovel} style={{padding:"10px 16px",background:"rgba(240,162,2,0.06)",border:"0.5px solid rgba(240,162,2,0.2)",borderRadius:9,color:"#F0A202",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em",marginBottom:20}}>
+            <button onClick={adicionarImovel} style={{padding:"10px 16px",background:"rgba(34,197,94,0.06)",border:"0.5px solid rgba(34,197,94,0.25)",borderRadius:9,color:"#22c55e",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em"}}>
               + Adicionar imóvel
             </button>
 
-            {/* Veículos */}
-            <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:14,...noEdit}}>Veículos</div>
+            {/* ═══ SEÇÃO 7: VEÍCULOS ═════════════════════════════════ */}
+            <SectionTitle icon="🚗" subtitle="Veículos em seu nome — inclui seguro e valor de mercado">Veículos</SectionTitle>
+
             {(snap.veiculos||[]).length===0&&(
-              <div style={{fontSize:12,color:T.textMuted,marginBottom:12,padding:"12px 0",...noEdit}}>Nenhum veículo cadastrado.</div>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:10,padding:"10px 0",...noEdit}}>Nenhum veículo cadastrado ainda.</div>
             )}
             {(snap.veiculos||[]).map((v,i)=>(
               <div key={i} style={{background:"rgba(255,255,255,0.02)",border:`0.5px solid ${T.border}`,borderRadius:12,padding:"14px",marginBottom:12}}>
@@ -1299,30 +1361,94 @@ export default function ClienteFicha() {
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10,marginBottom:10}}>
                   <div>
-                    <Lbl>Tipo de veículo</Lbl>
+                    <Lbl>Tipo</Lbl>
                     <CustomSelect value={v.tipo} onChange={val=>atualizarVeiculo(i,"tipo",val)} options={TIPOS_VEICULO}/>
                   </div>
                   <div>
-                    <Lbl>Nome / Identificação</Lbl>
-                    <InputTexto key={`ve-nome-${i}`} initValue={v.nome||""} onCommit={val=>atualizarVeiculo(i,"nome",val)} placeholder="Ex: Honda Civic"/>
+                    <Lbl>Modelo (top 50 BR)</Lbl>
+                    <CustomSelect value={v.modelo||v.nome||""} onChange={val=>atualizarVeiculo(i,"modelo",val)} options={VEICULOS_BRASIL} placeholder="Selecione o modelo"/>
                   </div>
                   <div>
                     <Lbl>Quantidade</Lbl>
                     <input type="number" min="1" max="99" value={v.quantidade||1} onChange={e=>atualizarVeiculo(i,"quantidade",Math.max(1,parseInt(e.target.value)||1))} style={{...C.input,width:"100%"}}/>
                   </div>
                   <div>
-                    <Lbl>Valor (R$)</Lbl>
+                    <Lbl>Valor de mercado (R$)</Lbl>
                     <CustomSelect value={v.faixa} onChange={val=>atualizarVeiculo(i,"faixa",val)} options={FAIXAS_VEICULO.map(f=>f.label)}/>
                   </div>
                 </div>
+                <div style={{marginBottom:10}}>
+                  <Lbl>Tem seguro?</Lbl>
+                  <PillChoice value={v.temSeguro?"Sim":v.temSeguro===false&&v.valorSeguro===""?"":v.temSeguro===false?"Não":""} onChange={val=>{
+                    if(val==="Sim") atualizarVeiculo(i,"temSeguro",true);
+                    else if(val==="Não") {atualizarVeiculo(i,"temSeguro",false);atualizarVeiculo(i,"valorSeguro","");}
+                    else atualizarVeiculo(i,"temSeguro",null);
+                  }} options={["Sim","Não"]}/>
+                </div>
+                {v.temSeguro===true&&(
+                  <div>
+                    <Lbl>Valor do seguro anual</Lbl>
+                    <InputMoeda key={`seg-${i}`} initValue={v.valorSeguro} onCommit={val=>atualizarVeiculo(i,"valorSeguro",val)}/>
+                  </div>
+                )}
               </div>
             ))}
-            <button onClick={adicionarVeiculo} style={{padding:"10px 16px",background:"rgba(96,165,250,0.06)",border:"0.5px solid rgba(96,165,250,0.2)",borderRadius:9,color:"#60a5fa",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em",marginBottom:20}}>
+            <button onClick={adicionarVeiculo} style={{padding:"10px 16px",background:"rgba(96,165,250,0.06)",border:"0.5px solid rgba(96,165,250,0.25)",borderRadius:9,color:"#60a5fa",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em"}}>
               + Adicionar veículo
             </button>
 
-            <button onClick={salvar} disabled={salvando} style={{...C.btnPrimary,marginTop:4}}>
-              {salvando?"Salvando...":"Salvar alterações"}
+            {/* ═══ SEÇÃO 8: MODELO DE ATENDIMENTO E CARTEIRA ════════════ */}
+            <SectionTitle icon="📈" subtitle="Como é atendido hoje e estilo de investimento">Atendimento Atual e Perfil de Investidor</SectionTitle>
+
+            <div style={{marginBottom:16}}>
+              <Lbl>Modelo de atendimento atual</Lbl>
+              <PillChoice value={snap.modeloAtendimento} onChange={v=>{setFSnap("modeloAtendimento",v);setFSnap("feeBased",v==="Fee Based");}} options={MODELO_ATENDIMENTO}/>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:16}}>
+              <div>
+                <Lbl>Rentabilidade anual atual (%)</Lbl>
+                <input type="text" inputMode="decimal" value={snap.rentabilidadeAnual||""} onChange={e=>{
+                  const v=e.target.value.replace(/[^\d,.]/g,"").replace(",",".");
+                  setFSnap("rentabilidadeAnual",v);
+                }} style={C.input} placeholder="Ex: 9,5"/>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:5,...noEdit}}>Estimativa de retorno médio ao ano</div>
+              </div>
+            </div>
+
+            <div style={{marginBottom:12}}>
+              <Lbl>Foco principal dos investimentos</Lbl>
+              <PillChoice value={snap.focoInvestimento} onChange={v=>setFSnap("focoInvestimento",v)} options={FOCOS_INVESTIMENTO}/>
+            </div>
+
+            {/* ═══ SEÇÃO 9: OBJETIVOS DE INTERESSE ════════════════════ */}
+            <SectionTitle icon="🎯" subtitle="Selecione os objetivos que fazem sentido para você — detalharemos cada um depois">Objetivos que Você Deseja Alcançar</SectionTitle>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))",gap:10,marginBottom:18}}>
+              {OBJETIVOS_CADASTRO.map(obj=>{
+                const sel = (snap.objetivosInteresse||[]).includes(obj.id);
+                return (
+                  <div key={obj.id} onClick={()=>toggleObjetivoInteresse(obj.id)}
+                    style={{
+                      padding:"14px 12px",borderRadius:12,cursor:"pointer",textAlign:"center",
+                      background:sel?"rgba(240,162,2,0.10)":"rgba(255,255,255,0.02)",
+                      border:sel?"0.5px solid rgba(240,162,2,0.5)":`0.5px solid ${T.border}`,
+                      transition:"all 0.18s",...noEdit,
+                    }}>
+                    <div style={{fontSize:22,marginBottom:6}}>{obj.icon}</div>
+                    <div style={{fontSize:11,color:sel?"#F0A202":T.textSecondary,lineHeight:1.3,fontWeight:sel?500:400}}>{obj.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+            {(snap.objetivosInteresse||[]).length>0&&id!=="novo"&&(
+              <button onClick={()=>navigate(`/cliente/${id}/objetivos`)} style={{padding:"10px 16px",background:"rgba(240,162,2,0.08)",border:"0.5px solid rgba(240,162,2,0.3)",borderRadius:9,color:"#F0A202",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.08em",marginBottom:16}}>
+                → Detalhar objetivos selecionados
+              </button>
+            )}
+
+            <button onClick={salvar} disabled={salvando} style={{...C.btnPrimary,marginTop:20}}>
+              {salvando?"Salvando...":(id==="novo"?"Cadastrar cliente e gerar diagnóstico":"Salvar alterações")}
             </button>
           </div>
         )}
@@ -1331,8 +1457,8 @@ export default function ClienteFicha() {
         {modo==="ver"&&id!=="novo"&&(
           <>
             {/* Quick links */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3, minmax(0, 1fr))",gap:10,marginBottom:14}}>
-              {[["Objetivos","objetivos","🎯"],["Carteira","carteira","📊"],["Gastos Mensais","fluxo","💸"]].map(([l,r,ic])=>(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4, minmax(0, 1fr))",gap:10,marginBottom:14}}>
+              {[["Diagnóstico","diagnostico","🧭"],["Objetivos","objetivos","🎯"],["Carteira","carteira","📊"],["Gastos Mensais","fluxo","💸"]].map(([l,r,ic])=>(
                 <div key={l}
                   onClick={()=>navigate(`/cliente/${id}/${r}`)}
                   style={{

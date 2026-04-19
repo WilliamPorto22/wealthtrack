@@ -6,6 +6,7 @@ import Objetivos from "./pages/Objetivos";
 import ObjetivoDetalhes from "./pages/ObjetivoDetalhes";
 import Carteira from "./pages/Carteira";
 import FluxoMensal from "./pages/FluxoMensal";
+import Diagnostico from "./pages/Diagnostico";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 function App() {
@@ -61,6 +62,14 @@ function App() {
           element={
             <ProtectedRoute>
               <FluxoMensal />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/cliente/:id/diagnostico"
+          element={
+            <ProtectedRoute>
+              <Diagnostico />
             </ProtectedRoute>
           }
         />

@@ -48,12 +48,9 @@ function getPatFin(c){
   return t>0?t:parseInt(String(c.patrimonio||"0").replace(/\D/g,""))/100;
 }
 
-// Calcula patrimônio total dos clientes
+// Calcula patrimônio financeiro total (usa mesma lógica dos cards individuais)
 function calcularPatrimonioTotal(clientes){
-  return clientes.reduce((total,c)=>{
-    const patrimonio=parseInt(String(c.patrimonio||"0").replace(/\D/g,""))/100;
-    return total+patrimonio;
-  },0);
+  return clientes.reduce((total,c)=>total+getPatFin(c),0);
 }
 
 
@@ -477,7 +474,7 @@ export default function Dashboard(){
         <div className="dashboard-cards-xp">
           <div className="card-xp">
             <div className="card-xp-label">Custódia Total</div>
-            <div className="card-xp-value">{brl(patrimonioTotal)}</div>
+            <div className="card-xp-value">{brlNum(patrimonioTotal)}</div>
             <div className="card-xp-subtitle">Total de {clientes.length} cliente{clientes.length!==1?"s":""}</div>
           </div>
 
