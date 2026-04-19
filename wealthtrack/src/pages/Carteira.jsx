@@ -1201,7 +1201,7 @@ function BackFab({ onClick }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// DRILL-DOWN DE CLASSE (painel lateral full-height)
+// DRILL-DOWN DE CLASSE (painel lateral full-height — paleta refinada)
 // ══════════════════════════════════════════════════════════════
 function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddAtivo, onEditAtivo, onRemoveAtivo }) {
   const p = totalCarteira > 0 ? Math.round((total / totalCarteira) * 100) : 0;
@@ -1210,6 +1210,95 @@ function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddA
   const rentMedia = somaRent > 0
     ? ativosComRent.reduce((acc, a) => acc + parseFloat(String(a.rentAno).replace(",", ".")) * parseCentavos(a.valor) / 100, 0) / somaRent
     : null;
+
+  // Mantém o índice original (necessário p/ editar/remover) ao agrupar
+  const indexed = ativos.map((a, idx) => ({ a, idx }));
+  const semObjetivo = indexed.filter(({ a }) => !a.objetivo);
+  const comObjetivo = indexed.filter(({ a }) => !!a.objetivo);
+
+  // Cartão neutro de ativo, para reduzir ruído visual
+  const renderAtivo = ({ a, idx }) => {
+    const valor = parseCentavos(a.valor) / 100;
+    const pAtivo = total > 0 ? (valor / total) * 100 : 0;
+    const temObjetivo = !!a.objetivo;
+    return (
+      <div key={a.id || idx} style={{
+        background: T.bgSecondary,
+        border: `0.5px solid ${T.border}`,
+        borderRadius: T.radiusMd,
+        padding: "16px 18px",
+        transition: "border-color 0.2s, background 0.2s",
+      }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.goldBorder; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, color: T.textPrimary, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", letterSpacing: "0.01em" }}>
+              {a.nome || <span style={{ color: T.textMuted, fontStyle: "italic" }}>Ativo sem nome</span>}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6, alignItems: "center" }}>
+              {temObjetivo ? (
+                <NeutralChip>🎯 {a.objetivo}</NeutralChip>
+              ) : (
+                <span
+                  onClick={() => onEditAtivo(idx)}
+                  style={{
+                    fontSize: 10, color: T.gold, background: "transparent",
+                    border: `0.5px dashed ${T.goldBorder}`, borderRadius: 6,
+                    padding: "3px 9px", letterSpacing: "0.04em", cursor: "pointer", ...noSel,
+                  }}
+                >+ definir objetivo</span>
+              )}
+              {a.segmento && <NeutralChip>{a.segmento}</NeutralChip>}
+              {a.vencimento && <NeutralChip muted>venc {a.vencimento}</NeutralChip>}
+            </div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontSize: 15, color: T.textPrimary, fontWeight: 500, fontVariantNumeric: "tabular-nums", letterSpacing: "0.01em" }}>{brl(valor)}</div>
+            <div style={{ fontSize: 10, color: T.textMuted, marginTop: 3, letterSpacing: "0.04em" }}>{pAtivo.toFixed(1)}% da classe</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 18, marginTop: 12, paddingTop: 12, borderTop: `0.5px solid ${T.border}`, alignItems: "center" }}>
+          {a.rentMes && (
+            <div>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em" }}>Rent. mês</div>
+              <div style={{ fontSize: 12, color: parseFloat(String(a.rentMes).replace(",", ".")) >= 0 ? T.success : T.danger, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{a.rentMes}%</div>
+            </div>
+          )}
+          {a.rentAno && (
+            <div>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em" }}>Rent. ano</div>
+              <div style={{ fontSize: 12, color: parseFloat(String(a.rentAno).replace(",", ".")) >= 0 ? T.success : T.danger, marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{a.rentAno}%</div>
+            </div>
+          )}
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={() => onEditAtivo(idx)}
+            style={{
+              fontSize: 10, color: T.gold, background: T.goldDim,
+              border: `0.5px solid ${T.goldBorder}`,
+              borderRadius: T.radiusSm, padding: "6px 14px", cursor: "pointer",
+              letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: T.fontFamily,
+              fontWeight: 500,
+            }}
+          >Editar</button>
+          <button
+            onClick={() => onRemoveAtivo(idx)}
+            style={{
+              fontSize: 10, color: T.textMuted, background: "transparent",
+              border: `0.5px solid ${T.border}`,
+              borderRadius: T.radiusSm, padding: "6px 12px", cursor: "pointer",
+              letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: T.fontFamily,
+              transition: "color 0.2s, border-color 0.2s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = T.danger; e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = T.textMuted; e.currentTarget.style.borderColor = T.border; }}
+          >Remover</button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{
@@ -1222,153 +1311,132 @@ function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddA
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 560, maxWidth: "95vw", height: "100%",
+          width: 600, maxWidth: "96vw", height: "100%",
           background: T.bg,
-          borderLeft: `0.5px solid rgba(${hexToRgb(classe.cor)},0.3)`,
+          borderLeft: `0.5px solid ${T.border}`,
           display: "flex", flexDirection: "column",
           animation: "slideIn 0.25s ease-out",
           overflow: "hidden",
         }}
       >
-        {/* Header */}
+        {/* Header — limpo, com apenas um traço fino na cor da classe */}
         <div style={{
-          padding: "24px 28px",
-          background: `linear-gradient(135deg, rgba(${hexToRgb(classe.cor)},0.08), transparent)`,
+          padding: "26px 30px",
+          background: T.bg,
           borderBottom: `0.5px solid ${T.border}`,
           flexShrink: 0,
+          position: "relative",
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+          <div style={{
+            position: "absolute", left: 0, top: 26, bottom: 26, width: 3,
+            background: classe.cor, borderRadius: "0 2px 2px 0",
+          }} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
             <div>
-              <div style={{ fontSize: 10, color: classe.cor, textTransform: "uppercase", letterSpacing: "0.16em", marginBottom: 6 }}>Classe de ativo</div>
-              <div style={{ fontSize: 22, fontWeight: 300, color: T.textPrimary, letterSpacing: "-0.01em" }}>{classe.label}</div>
+              <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 6, ...noSel }}>Classe de ativo</div>
+              <div style={{ fontSize: 24, fontWeight: 300, color: T.textPrimary, letterSpacing: "-0.01em" }}>{classe.label}</div>
             </div>
             <button onClick={onClose} style={{
               background: "rgba(255,255,255,0.04)", border: `0.5px solid ${T.border}`,
-              borderRadius: "50%", width: 32, height: 32, color: T.textSecondary,
-              cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: "50%", width: 34, height: 34, color: T.textSecondary,
+              cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: T.fontFamily,
             }}>×</button>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12, marginTop: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14, marginTop: 4 }}>
             <div>
-              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Total</div>
-              <div style={{ fontSize: 16, color: classe.cor, fontWeight: 400 }}>{brl(total)}</div>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 6, ...noSel }}>Total</div>
+              <div style={{ fontSize: 17, color: T.gold, fontWeight: 400, letterSpacing: "0.01em" }}>{brl(total)}</div>
             </div>
             <div>
-              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>% da carteira</div>
-              <div style={{ fontSize: 16, color: T.textPrimary, fontWeight: 300 }}>{p}%</div>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 6, ...noSel }}>% da carteira</div>
+              <div style={{ fontSize: 17, color: T.textPrimary, fontWeight: 300 }}>{p}%</div>
             </div>
             <div>
-              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 4 }}>Rent. média a.a.</div>
-              <div style={{ fontSize: 16, color: rentMedia !== null ? (rentMedia > 0 ? T.success : T.danger) : T.textMuted, fontWeight: 400 }}>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 6, ...noSel }}>Rent. média a.a.</div>
+              <div style={{ fontSize: 17, color: rentMedia !== null ? (rentMedia > 0 ? T.success : T.danger) : T.textMuted, fontWeight: 400, fontVariantNumeric: "tabular-nums" }}>
                 {rentMedia !== null ? `${rentMedia > 0 ? "+" : ""}${rentMedia.toFixed(2)}%` : "—"}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Lista de ativos */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px" }}>
+        {/* Lista de ativos — agrupada: sem objetivo primeiro, depois com objetivo */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 26px" }}>
           {ativos.length === 0 && (
-            <div style={{ textAlign: "center", padding: "40px 20px", color: T.textMuted, fontSize: 12, ...noSel }}>
+            <div style={{ textAlign: "center", padding: "60px 20px", color: T.textMuted, fontSize: 13, ...noSel }}>
               Nenhum ativo cadastrado nesta classe.
             </div>
           )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {ativos.map((a, idx) => {
-              const valor = parseCentavos(a.valor) / 100;
-              const pAtivo = total > 0 ? (valor / total) * 100 : 0;
-              return (
-                <div key={a.id || idx} style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: `0.5px solid rgba(${hexToRgb(classe.cor)},0.15)`,
-                  borderRadius: T.radiusMd,
-                  padding: "14px 16px",
-                  position: "relative",
-                  overflow: "hidden",
-                }}>
-                  <div style={{
-                    position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: classe.cor,
-                  }} />
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, gap: 10 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: T.textPrimary, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {a.nome || <span style={{ color: T.textMuted, fontStyle: "italic" }}>Ativo sem nome</span>}
-                      </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4, alignItems: "center" }}>
-                        {a.objetivo ? (
-                          <Tag cor={T.gold}>🎯 {a.objetivo}</Tag>
-                        ) : (
-                          <span
-                            onClick={() => onEditAtivo(idx)}
-                            style={{
-                              fontSize: 9, color: T.gold, background: "rgba(240,162,2,0.05)",
-                              border: "0.5px dashed rgba(240,162,2,0.35)", borderRadius: 4,
-                              padding: "2px 7px", letterSpacing: "0.03em", cursor: "pointer", ...noSel,
-                            }}
-                          >+ definir objetivo</span>
-                        )}
-                        {a.segmento && <Tag cor="#60a5fa">{a.segmento}</Tag>}
-                        {a.vencimento && <Tag cor={T.textSecondary}>venc {a.vencimento}</Tag>}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontSize: 14, color: T.gold, fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{brl(valor)}</div>
-                      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>{pAtivo.toFixed(1)}% da classe</div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 16, marginTop: 10, paddingTop: 10, borderTop: `0.5px solid ${T.border}` }}>
-                    {a.rentMes && (
-                      <div>
-                        <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>Rent. mês</div>
-                        <div style={{ fontSize: 11, color: T.success, marginTop: 2 }}>{a.rentMes}%</div>
-                      </div>
-                    )}
-                    {a.rentAno && (
-                      <div>
-                        <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>Rent. ano</div>
-                        <div style={{ fontSize: 11, color: T.success, marginTop: 2 }}>{a.rentAno}%</div>
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }} />
-                    <button
-                      onClick={() => onEditAtivo(idx)}
-                      style={{
-                        fontSize: 10, color: classe.cor, background: `rgba(${hexToRgb(classe.cor)},0.08)`,
-                        border: `0.5px solid rgba(${hexToRgb(classe.cor)},0.2)`,
-                        borderRadius: 6, padding: "4px 10px", cursor: "pointer",
-                        letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: T.fontFamily,
-                      }}
-                    >editar</button>
-                    <button
-                      onClick={() => onRemoveAtivo(idx)}
-                      style={{
-                        fontSize: 10, color: T.danger, background: "rgba(239,68,68,0.06)",
-                        border: "0.5px solid rgba(239,68,68,0.2)",
-                        borderRadius: 6, padding: "4px 10px", cursor: "pointer",
-                        letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: T.fontFamily,
-                      }}
-                    >remover</button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+
+          {semObjetivo.length > 0 && (
+            <div style={{ marginBottom: comObjetivo.length > 0 ? 24 : 0 }}>
+              <div style={{
+                fontSize: 9, color: T.textMuted, textTransform: "uppercase",
+                letterSpacing: "0.16em", marginBottom: 12, fontWeight: 500,
+                display: "flex", alignItems: "center", gap: 10, ...noSel,
+              }}>
+                <span>Sem objetivo vinculado</span>
+                <span style={{ color: T.textMuted, opacity: 0.6 }}>·</span>
+                <span style={{ color: T.gold }}>{semObjetivo.length}</span>
+                <div style={{ flex: 1, height: "0.5px", background: T.border }} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {semObjetivo.map(renderAtivo)}
+              </div>
+            </div>
+          )}
+
+          {comObjetivo.length > 0 && (
+            <div>
+              <div style={{
+                fontSize: 9, color: T.textMuted, textTransform: "uppercase",
+                letterSpacing: "0.16em", marginBottom: 12, fontWeight: 500,
+                display: "flex", alignItems: "center", gap: 10, ...noSel,
+              }}>
+                <span>Com objetivo vinculado</span>
+                <span style={{ color: T.textMuted, opacity: 0.6 }}>·</span>
+                <span style={{ color: T.gold }}>{comObjetivo.length}</span>
+                <div style={{ flex: 1, height: "0.5px", background: T.border }} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {comObjetivo.map(renderAtivo)}
+              </div>
+            </div>
+          )}
 
           <button
             onClick={onAddAtivo}
             style={{
-              width: "100%", marginTop: 14, padding: 14,
-              background: `rgba(${hexToRgb(classe.cor)},0.05)`,
-              border: `1px dashed rgba(${hexToRgb(classe.cor)},0.3)`,
+              width: "100%", marginTop: 18, padding: 16,
+              background: T.goldDim,
+              border: `1px dashed ${T.goldBorder}`,
               borderRadius: T.radiusMd,
-              color: classe.cor, fontSize: 12, cursor: "pointer",
-              fontFamily: T.fontFamily, letterSpacing: "0.08em",
+              color: T.gold, fontSize: 12, cursor: "pointer",
+              fontFamily: T.fontFamily, letterSpacing: "0.14em",
+              textTransform: "uppercase", fontWeight: 500,
             }}
           >+ Adicionar ativo a {classe.label}</button>
         </div>
       </div>
       <style>{`@keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
     </div>
+  );
+}
+
+// Chip neutro — usado dentro do drilldown para tags (objetivo, segmento, vencimento)
+function NeutralChip({ children, muted }) {
+  return (
+    <span style={{
+      fontSize: 10,
+      color: muted ? T.textMuted : T.textSecondary,
+      background: "rgba(255,255,255,0.03)",
+      border: `0.5px solid ${T.border}`,
+      borderRadius: 6,
+      padding: "3px 9px",
+      letterSpacing: "0.04em",
+      ...noSel,
+    }}>{children}</span>
   );
 }
 
@@ -1384,7 +1452,7 @@ function Tag({ cor, children }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// EDITOR DE ATIVO (modal completo: pode mudar classe, objetivo, segmento)
+// EDITOR DE ATIVO (modal grande e refinado: classe, objetivo, segmento)
 // ══════════════════════════════════════════════════════════════
 function AtivoEditor({ ctx, snap, onClose, onUpdate, onMove }) {
   const { classKey, idx } = ctx;
@@ -1400,16 +1468,36 @@ function AtivoEditor({ ctx, snap, onClose, onUpdate, onMove }) {
     segmento: ativo.segmento || "",
     novaClasse: classKey,
   });
+  const [confirmObjetivo, setConfirmObjetivo] = useState(null); // { from, to }
+  const objetivoOriginal = ativo.objetivo || "";
 
   const classesOptions = CLASSES.filter((c) => !c.legado).map((c) => ({ value: c.key, label: c.label }));
   const segOpts = form.novaClasse === "acoes" ? SEGMENTOS.acoes : form.novaClasse === "fiis" ? SEGMENTOS.fiis : null;
 
   function setF(k, v) { setForm((p) => ({ ...p, [k]: v })); }
 
+  function handleObjetivoChange(novoValor) {
+    // Se já existe um objetivo previamente cadastrado e o usuário escolheu outro diferente,
+    // pedir confirmação antes de aplicar a troca.
+    if (objetivoOriginal && novoValor && novoValor !== objetivoOriginal && novoValor !== form.objetivo) {
+      setConfirmObjetivo({ from: objetivoOriginal, to: novoValor });
+      return;
+    }
+    // Se está limpando um objetivo previamente cadastrado, também confirmar
+    if (objetivoOriginal && !novoValor) {
+      setConfirmObjetivo({ from: objetivoOriginal, to: "" });
+      return;
+    }
+    setF("objetivo", novoValor);
+  }
+
+  function confirmarTrocaObjetivo() {
+    setF("objetivo", confirmObjetivo.to);
+    setConfirmObjetivo(null);
+  }
+
   function handleSave() {
     if (form.novaClasse !== classKey) {
-      // Muda de classe: remove da origem, adiciona no destino (AtivoEditor já faz .onMove)
-      // Precisa primeiro atualizar os dados do ativo atual e depois mover
       onUpdate({ nome: form.nome, valor: form.valor, objetivo: form.objetivo, vencimento: form.vencimento, rentMes: form.rentMes, rentAno: form.rentAno, segmento: form.segmento });
       setTimeout(() => onMove(form.novaClasse, form.segmento), 50);
     } else {
@@ -1418,120 +1506,268 @@ function AtivoEditor({ ctx, snap, onClose, onUpdate, onMove }) {
     }
   }
 
+  // Ordenação dos objetivos no select: lista padrão
+  const objetivosOrdenados = OBJETIVOS;
+
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 700,
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", zIndex: 700,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+      backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
     }} onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
           background: T.bgCard,
-          border: `0.5px solid rgba(${hexToRgb(classe.cor)},0.3)`,
-          borderRadius: T.radiusLg,
-          padding: 24,
-          width: 500, maxWidth: "95vw",
-          maxHeight: "90vh", overflowY: "auto",
+          border: `0.5px solid ${T.border}`,
+          borderRadius: T.radiusXl,
+          width: 760, maxWidth: "96vw",
+          maxHeight: "92vh", overflowY: "auto",
           boxShadow: T.shadowLg,
+          animation: "editorIn 0.22s ease-out",
         }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+        {/* Header com traço fino na cor da classe */}
+        <div style={{
+          padding: "26px 32px 22px",
+          borderBottom: `0.5px solid ${T.border}`,
+          position: "relative",
+          display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16,
+        }}>
+          <div style={{
+            position: "absolute", left: 0, top: 26, bottom: 22, width: 3,
+            background: classe.cor, borderRadius: "0 2px 2px 0",
+          }} />
           <div>
-            <div style={{ fontSize: 10, color: classe.cor, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 4 }}>
+            <div style={{ fontSize: 11, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 6, ...noSel }}>
               {idx === undefined ? "Novo ativo" : "Editar ativo"}
             </div>
-            <div style={{ fontSize: 17, fontWeight: 400, color: T.textPrimary }}>{classe.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 300, color: T.textPrimary, letterSpacing: "-0.01em" }}>
+              {form.nome || classe.label}
+            </div>
+            {form.nome && (
+              <div style={{ fontSize: 12, color: T.textSecondary, marginTop: 4, letterSpacing: "0.02em" }}>
+                {classe.label}
+              </div>
+            )}
           </div>
           <button onClick={onClose} style={{
             background: "rgba(255,255,255,0.04)", border: `0.5px solid ${T.border}`,
-            borderRadius: "50%", width: 30, height: 30, color: T.textSecondary,
-            cursor: "pointer", fontSize: 14,
+            borderRadius: "50%", width: 36, height: 36, color: T.textSecondary,
+            cursor: "pointer", fontSize: 18, fontFamily: T.fontFamily,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
           }}>×</button>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ padding: "26px 32px 28px", display: "flex", flexDirection: "column", gap: 22 }}>
+          {/* Bloco 1: identificação */}
           <div>
-            <div style={{ ...C.label }}>Nome do ativo</div>
-            <InputTexto initValue={form.nome} onCommit={(v) => setF("nome", v)} placeholder="Ex: CDB Itaú IPCA+ 2030" />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+            <SectionHeader>Identificação</SectionHeader>
             <div>
-              <div style={{ ...C.label }}>Valor investido</div>
-              <InputMoeda initValue={form.valor} onCommit={(v) => setF("valor", v)} />
-            </div>
-            <div>
-              <div style={{ ...C.label }}>Vencimento (opcional)</div>
-              <InputTexto initValue={form.vencimento} onCommit={(v) => setF("vencimento", v)} placeholder="DD/MM/AAAA" />
+              <div style={{ ...C.label, fontSize: 11 }}>Nome do ativo</div>
+              <InputTexto initValue={form.nome} onCommit={(v) => setF("nome", v)} placeholder="Ex: CDB Itaú IPCA+ 2030" size="lg" />
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-            <div>
-              <div style={{ ...C.label }}>Rentabilidade no mês (%)</div>
-              <InputPct initValue={form.rentMes} onCommit={(v) => setF("rentMes", v)} placeholder="0,85" />
-            </div>
-            <div>
-              <div style={{ ...C.label }}>Rentabilidade no ano (%)</div>
-              <InputPct initValue={form.rentAno} onCommit={(v) => setF("rentAno", v)} placeholder="12,5" />
-            </div>
-          </div>
-
-          <div style={{
-            padding: 14, background: "rgba(240,162,2,0.04)",
-            border: "0.5px solid rgba(240,162,2,0.2)", borderRadius: T.radiusMd,
-          }}>
-            <div style={{ fontSize: 9, color: T.gold, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 10, ...noSel }}>
-              🎯 Classificação & Integração
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 10 }}>
+          {/* Bloco 2: valor & datas */}
+          <div>
+            <SectionHeader>Valor & prazo</SectionHeader>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14 }}>
               <div>
-                <div style={{ ...C.label }}>Classe do ativo</div>
-                <Select value={form.novaClasse} onChange={(v) => setF("novaClasse", v)} options={classesOptions} />
+                <div style={{ ...C.label, fontSize: 11 }}>Valor investido</div>
+                <InputMoeda initValue={form.valor} onCommit={(v) => setF("valor", v)} size="lg" />
+              </div>
+              <div>
+                <div style={{ ...C.label, fontSize: 11 }}>Vencimento (opcional)</div>
+                <InputTexto initValue={form.vencimento} onCommit={(v) => setF("vencimento", v)} placeholder="DD/MM/AAAA" size="lg" />
+              </div>
+            </div>
+          </div>
+
+          {/* Bloco 3: rentabilidade */}
+          <div>
+            <SectionHeader>Rentabilidade</SectionHeader>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14 }}>
+              <div>
+                <div style={{ ...C.label, fontSize: 11 }}>Rentabilidade no mês (%)</div>
+                <InputPctLg initValue={form.rentMes} onCommit={(v) => setF("rentMes", v)} placeholder="0,85" />
+              </div>
+              <div>
+                <div style={{ ...C.label, fontSize: 11 }}>Rentabilidade no ano (%)</div>
+                <InputPctLg initValue={form.rentAno} onCommit={(v) => setF("rentAno", v)} placeholder="12,5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Bloco 4: classificação */}
+          <div style={{
+            padding: "20px 22px",
+            background: T.bgSecondary,
+            border: `0.5px solid ${T.border}`,
+            borderRadius: T.radiusLg,
+          }}>
+            <SectionHeader>Classificação & vínculo com objetivo</SectionHeader>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14, marginBottom: segOpts ? 14 : 0 }}>
+              <div>
+                <div style={{ ...C.label, fontSize: 11 }}>Classe do ativo</div>
+                <SelectLg value={form.novaClasse} onChange={(v) => setF("novaClasse", v)} options={classesOptions} />
                 {form.novaClasse !== classKey && (
-                  <div style={{ fontSize: 9, color: T.gold, marginTop: 4, ...noSel }}>
-                    ⚠ Ativo será movido para {classByKey[form.novaClasse]?.label}
+                  <div style={{
+                    fontSize: 11, color: T.gold, marginTop: 8, ...noSel,
+                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "8px 10px", background: T.goldDim,
+                    border: `0.5px solid ${T.goldBorder}`, borderRadius: T.radiusSm,
+                  }}>
+                    <span>⚠</span>
+                    <span>Ativo será movido para {classByKey[form.novaClasse]?.label}</span>
                   </div>
                 )}
               </div>
               <div>
-                <div style={{ ...C.label }}>Objetivo (liga ao planejamento)</div>
-                <Select value={form.objetivo} onChange={(v) => setF("objetivo", v)} options={OBJETIVOS} placeholder="— sem objetivo" />
+                <div style={{ ...C.label, fontSize: 11 }}>Objetivo (liga ao planejamento)</div>
+                <SelectLg value={form.objetivo} onChange={handleObjetivoChange} options={objetivosOrdenados} placeholder="— sem objetivo" />
+                {objetivoOriginal && form.objetivo === objetivoOriginal && (
+                  <div style={{ fontSize: 10, color: T.textMuted, marginTop: 6, ...noSel }}>
+                    Vinculado a <span style={{ color: T.gold }}>{objetivoOriginal}</span>
+                  </div>
+                )}
               </div>
             </div>
             {segOpts && (
               <div>
-                <div style={{ ...C.label }}>Segmento</div>
-                <Select value={form.segmento} onChange={(v) => setF("segmento", v)} options={segOpts} placeholder="— sem segmento" />
+                <div style={{ ...C.label, fontSize: 11 }}>Segmento</div>
+                <SelectLg value={form.segmento} onChange={(v) => setF("segmento", v)} options={segOpts} placeholder="— sem segmento" />
               </div>
             )}
-            <div style={{ fontSize: 9, color: T.textMuted, marginTop: 10, lineHeight: 1.5, ...noSel }}>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 14, lineHeight: 1.6, ...noSel, letterSpacing: "0.01em" }}>
               Ao definir o objetivo, o ativo é automaticamente vinculado ao planejamento financeiro do cliente.
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
+          <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
             <button onClick={onClose} style={{
-              flex: 1, padding: 12, background: "rgba(255,255,255,0.04)",
+              flex: 1, padding: "14px 16px", background: "rgba(255,255,255,0.04)",
               border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd,
-              color: T.textSecondary, fontSize: 11, cursor: "pointer",
-              fontFamily: T.fontFamily, letterSpacing: "0.12em", textTransform: "uppercase",
+              color: T.textSecondary, fontSize: 12, cursor: "pointer",
+              fontFamily: T.fontFamily, letterSpacing: "0.16em", textTransform: "uppercase",
             }}>Cancelar</button>
             <button onClick={handleSave} style={{
-              flex: 1.5, padding: 12,
-              background: "rgba(240,162,2,0.12)",
-              border: "0.5px solid rgba(240,162,2,0.4)",
+              flex: 1.6, padding: "14px 16px",
+              background: T.goldDim,
+              border: `1px solid ${T.goldBorder}`,
               borderRadius: T.radiusMd,
-              color: T.gold, fontSize: 11, cursor: "pointer",
-              fontFamily: T.fontFamily, letterSpacing: "0.12em", textTransform: "uppercase",
+              color: T.gold, fontSize: 12, cursor: "pointer",
+              fontFamily: T.fontFamily, letterSpacing: "0.16em", textTransform: "uppercase",
               fontWeight: 500,
             }}>Salvar alterações</button>
           </div>
         </div>
       </div>
+
+      {/* Confirmação de troca de objetivo */}
+      {confirmObjetivo && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 720, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
+          onClick={() => setConfirmObjetivo(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: T.bgCard, border: `0.5px solid ${T.border}`, borderRadius: T.radiusLg,
+              width: 460, maxWidth: "96vw", padding: "26px 28px 22px",
+              boxShadow: T.shadowLg,
+            }}
+          >
+            <div style={{ fontSize: 10, color: T.gold, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 8, ...noSel }}>
+              Confirmar alteração
+            </div>
+            <div style={{ fontSize: 18, color: T.textPrimary, fontWeight: 400, marginBottom: 14, letterSpacing: "-0.01em" }}>
+              {confirmObjetivo.to ? "Redirecionar este ativo?" : "Remover vínculo do ativo?"}
+            </div>
+            <div style={{ fontSize: 13, color: T.textSecondary, lineHeight: 1.7, marginBottom: 22 }}>
+              <strong style={{ color: T.textPrimary }}>{form.nome || "Este ativo"}</strong> está atualmente vinculado a{" "}
+              <strong style={{ color: T.gold }}>"{confirmObjetivo.from}"</strong>.
+              {confirmObjetivo.to ? (
+                <> Deseja redirecioná-lo para <strong style={{ color: T.gold }}>"{confirmObjetivo.to}"</strong>?</>
+              ) : (
+                <> Deseja remover o vínculo com este objetivo?</>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setConfirmObjetivo(null)} style={{
+                padding: "11px 20px", background: "transparent", border: `0.5px solid ${T.border}`,
+                borderRadius: T.radiusMd, color: T.textSecondary, fontSize: 11, cursor: "pointer",
+                fontFamily: T.fontFamily, letterSpacing: "0.14em", textTransform: "uppercase",
+              }}>Não</button>
+              <button onClick={confirmarTrocaObjetivo} style={{
+                padding: "11px 22px", background: T.goldDim, border: `1px solid ${T.goldBorder}`,
+                borderRadius: T.radiusMd, color: T.gold, fontSize: 11, cursor: "pointer",
+                fontFamily: T.fontFamily, letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 600,
+              }}>Sim, confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`@keyframes editorIn { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
     </div>
   );
 }
+
+// Helpers visuais p/ AtivoEditor (legibilidade)
+function SectionHeader({ children }) {
+  return (
+    <div style={{
+      fontSize: 10, color: T.gold, textTransform: "uppercase", letterSpacing: "0.18em",
+      marginBottom: 12, fontWeight: 500, display: "flex", alignItems: "center", gap: 10, ...noSel,
+    }}>
+      <div style={{ width: 18, height: 1, background: T.goldBorder }} />
+      {children}
+    </div>
+  );
+}
+
+function SelectLg({ value, onChange, options, placeholder = "—" }) {
+  return (
+    <select
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        width: "100%",
+        background: "rgba(255,255,255,0.04)",
+        border: `0.5px solid ${T.border}`,
+        borderRadius: T.radiusMd,
+        color: value ? T.textPrimary : T.textMuted,
+        fontSize: 14,
+        padding: "13px 16px",
+        fontFamily: T.fontFamily,
+        cursor: "pointer",
+        outline: "none",
+        appearance: "none",
+        letterSpacing: "0.01em",
+      }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((o) => (
+        <option key={typeof o === "string" ? o : o.value} value={typeof o === "string" ? o : o.value}>
+          {typeof o === "string" ? o : o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+const InputPctLg = memo(function InputPctLg({ initValue, onCommit, placeholder = "0,00%" }) {
+  const [val, setVal] = useState(initValue || "");
+  return (
+    <input
+      style={{ ...C.input, fontSize: 14, padding: "13px 16px" }}
+      placeholder={placeholder}
+      value={val}
+      onChange={(e) => { setVal(e.target.value); onCommit(e.target.value); }}
+    />
+  );
+});
 
 // ══════════════════════════════════════════════════════════════
 // MODAL DE APORTE

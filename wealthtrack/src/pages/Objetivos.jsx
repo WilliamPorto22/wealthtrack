@@ -141,6 +141,7 @@ const emojisPorTipo = {
 function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, totalCalculado, onIrCarteira }) {
   const todos = listarAtivosCarteira(carteira);
   const label = TIPO_OBJETIVO_PARA_LABEL[tipoObjetivo];
+  const [confirmTransfer, setConfirmTransfer] = useState(null);
 
   if (todos.length === 0) {
     return (
@@ -170,9 +171,10 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
     );
   }
 
-  // Agrupa sugeridos (os que já têm o rótulo deste objetivo) e demais
+  // Três grupos: livres > vinculados a este objetivo > vinculados a outro
+  const livres = todos.filter(a => !a.objetivo);
   const sugeridos = todos.filter(a => (a.objetivo || "") === label);
-  const demais = todos.filter(a => (a.objetivo || "") !== label);
+  const outroObjetivo = todos.filter(a => a.objetivo && a.objetivo !== label);
 
   function toggle(a) {
     const k = `${a.classeKey}::${a.id}`;
@@ -181,17 +183,21 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
     setSelecionados(n);
   }
 
-  const LinhaAtivo = ({ a }) => {
+  const LinhaAtivo = ({ a, isOutro = false }) => {
     const k = `${a.classeKey}::${a.id}`;
     const marcado = selecionados.has(k);
+    const onClickItem = () => {
+      if (isOutro && !marcado) setConfirmTransfer(a);
+      else toggle(a);
+    };
     return (
       <div
-        onClick={() => toggle(a)}
+        onClick={onClickItem}
         style={{
           display: "flex",
           alignItems: "center",
           gap: 10,
-          padding: "10px 12px",
+          padding: "11px 14px",
           background: marcado ? "rgba(240,162,2,0.08)" : "rgba(255,255,255,0.02)",
           border: marcado ? `0.5px solid ${T.goldBorder}` : `0.5px solid ${T.border}`,
           borderRadius: T.radiusSm,
@@ -200,33 +206,54 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
         }}
       >
         <div style={{
-          width: 16, height: 16, borderRadius: 4,
+          width: 18, height: 18, borderRadius: 5,
           background: marcado ? T.gold : "transparent",
           border: marcado ? `1px solid ${T.gold}` : `1px solid ${T.textMuted}`,
           display: "flex", alignItems: "center", justifyContent: "center",
           flexShrink: 0,
-          color: T.bg, fontSize: 11, fontWeight: 700,
+          color: T.bg, fontSize: 12, fontWeight: 700,
         }}>
           {marcado ? "✓" : ""}
         </div>
-        <div style={{ width: 4, height: 22, borderRadius: 2, background: a.classeCor, flexShrink: 0 }} />
+        <div style={{ width: 4, height: 24, borderRadius: 2, background: a.classeCor, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, color: T.textPrimary, fontWeight: 500, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div style={{ fontSize: 13, color: T.textPrimary, fontWeight: 500, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {a.nome || "Ativo sem nome"}
           </div>
           <div style={{ fontSize: 10, color: T.textMuted, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <span>{a.classeLabel}</span>
-            {a.objetivo && a.objetivo !== label && (
-              <span style={{ color: T.warning }}>· já vinculado a "{a.objetivo}"</span>
+            {isOutro && (
+              <span style={{ color: "#f59e0b" }}>· vinculado a "{a.objetivo}"</span>
             )}
           </div>
         </div>
-        <div style={{ fontSize: 13, color: marcado ? T.gold : T.textSecondary, fontWeight: 600, flexShrink: 0 }}>
-          {a.valorReais.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </div>
+        {isOutro && !marcado ? (
+          <div style={{
+            fontSize: 10, color: "#f59e0b", fontWeight: 600, flexShrink: 0,
+            border: "0.5px solid rgba(245,158,11,0.4)", borderRadius: 6,
+            padding: "4px 10px", letterSpacing: "0.04em", whiteSpace: "nowrap",
+          }}>Editar objetivo</div>
+        ) : (
+          <div style={{ fontSize: 13, color: marcado ? T.gold : T.textSecondary, fontWeight: 600, flexShrink: 0 }}>
+            {a.valorReais.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        )}
       </div>
     );
   };
+
+  const SectionLabel = ({ children, count, cor = T.textMuted }) => (
+    <div style={{
+      fontSize: 9, color: cor, letterSpacing: "0.16em", textTransform: "uppercase",
+      marginBottom: 10, marginTop: 4, fontWeight: 600,
+      display: "flex", alignItems: "center", gap: 10,
+    }}>
+      <span>{children}</span>
+      <span style={{ opacity: 0.5 }}>·</span>
+      <span>{count}</span>
+      <div style={{ flex: 1, height: "0.5px", background: T.border }} />
+    </div>
+  );
 
   return (
     <div style={{ marginBottom: 20 }}>
@@ -237,7 +264,7 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
         border: `0.5px solid ${T.goldBorder}`,
         borderRadius: T.radiusMd,
         padding: "12px 16px",
-        marginBottom: 12,
+        marginBottom: 16,
       }}>
         <div>
           <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>
@@ -253,29 +280,34 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
         </div>
       </div>
 
+      {livres.length > 0 && (
+        <>
+          <SectionLabel count={livres.length}>Sem objetivo vinculado</SectionLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+            {livres.map(a => <LinhaAtivo key={`${a.classeKey}-${a.id}`} a={a} />)}
+          </div>
+        </>
+      )}
+
       {sugeridos.length > 0 && (
         <>
-          <div style={{ fontSize: 9, color: T.gold, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>
-            Sugeridos — já marcados como "{label}"
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+          <SectionLabel count={sugeridos.length} cor={T.gold}>Vinculados a este objetivo</SectionLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
             {sugeridos.map(a => <LinhaAtivo key={`${a.classeKey}-${a.id}`} a={a} />)}
           </div>
         </>
       )}
 
-      {demais.length > 0 && (
+      {outroObjetivo.length > 0 && (
         <>
-          <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>
-            {sugeridos.length > 0 ? "Outros ativos da carteira" : "Ativos da carteira"}
-          </div>
+          <SectionLabel count={outroObjetivo.length} cor="#f59e0b">Vinculados a outro objetivo</SectionLabel>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 320, overflowY: "auto" }}>
-            {demais.map(a => <LinhaAtivo key={`${a.classeKey}-${a.id}`} a={a} />)}
+            {outroObjetivo.map(a => <LinhaAtivo key={`${a.classeKey}-${a.id}`} a={a} isOutro />)}
           </div>
         </>
       )}
 
-      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 12, lineHeight: 1.6, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ fontSize: 10, color: T.textMuted, marginTop: 14, lineHeight: 1.6, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span>Os ativos selecionados serão marcados na sua carteira com o objetivo "{label}" e contabilizados como patrimônio deste plano.</span>
         {onIrCarteira && (
           <button
@@ -286,6 +318,46 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
           </button>
         )}
       </div>
+
+      {/* Modal de confirmação para transferir ativo de outro objetivo */}
+      {confirmTransfer && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 720, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}
+          onClick={() => setConfirmTransfer(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: T.bgCard, border: `0.5px solid ${T.border}`, borderRadius: T.radiusLg,
+              width: 440, maxWidth: "96vw", padding: "26px 28px 22px", boxShadow: T.shadowLg,
+            }}
+          >
+            <div style={{ fontSize: 10, color: T.gold, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 8 }}>
+              Confirmar alteração
+            </div>
+            <div style={{ fontSize: 17, color: T.textPrimary, fontWeight: 400, marginBottom: 14, letterSpacing: "-0.01em" }}>
+              Redirecionar este ativo?
+            </div>
+            <div style={{ fontSize: 13, color: T.textSecondary, lineHeight: 1.7, marginBottom: 22 }}>
+              <strong style={{ color: T.textPrimary }}>{confirmTransfer.nome || "Ativo sem nome"}</strong><br />
+              Atualmente vinculado a{" "}
+              <strong style={{ color: "#f59e0b" }}>"{confirmTransfer.objetivo}"</strong>.<br />
+              Deseja transferir para{" "}
+              <strong style={{ color: T.gold }}>"{label}"</strong>?
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setConfirmTransfer(null)}
+                style={{ padding: "11px 20px", background: "transparent", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, color: T.textSecondary, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, letterSpacing: "0.14em", textTransform: "uppercase" }}
+              >Não</button>
+              <button
+                onClick={() => { toggle(confirmTransfer); setConfirmTransfer(null); }}
+                style={{ padding: "11px 22px", background: T.goldDim, border: `1px solid ${T.goldBorder}`, borderRadius: T.radiusMd, color: T.gold, fontSize: 11, cursor: "pointer", fontFamily: T.fontFamily, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase" }}
+              >Sim, transferir</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -306,6 +378,8 @@ export default function Objetivos() {
   const [patrimSource, setPatrimSource] = useState("manual");
   // ativos selecionados para este objetivo: Set de "classeKey::ativoId"
   const [ativosSelecionados, setAtivosSelecionados] = useState(new Set());
+  // modal de confirmação ao clicar no X do card — guarda o índice do objetivo
+  const [confirmAcao, setConfirmAcao] = useState(null);
 
   const carregarCliente = useCallback(async () => {
     const snap = await getDoc(doc(db, "clientes", id));
@@ -611,7 +685,7 @@ export default function Objetivos() {
                             lineHeight:1,
                             padding:0
                           }}
-                          onClick={() => deletar(i)}
+                          onClick={(e) => { e.stopPropagation(); setConfirmAcao(i); }}
                         >
                           ×
                         </button>
@@ -721,6 +795,86 @@ export default function Objetivos() {
           })}
         </div>
       </div>
+
+      {/* Modal confirmação editar/excluir objetivo */}
+      {confirmAcao !== null && (() => {
+        const obj = objetivos[confirmAcao];
+        if (!obj) return null;
+        const nome = obj.nomeCustom || obj.label;
+        const emoji = emojisPorTipo[obj.tipo] || "⭐";
+        return (
+          <div
+            onClick={() => setConfirmAcao(null)}
+            style={{
+              position:"fixed", inset:0, zIndex:100,
+              background:"rgba(0,0,0,0.75)",
+              backdropFilter:"blur(4px)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              padding:20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background:T.cardBg || "#111",
+                border:`0.5px solid ${T.border}`,
+                borderRadius:T.radiusLg || 16,
+                padding:"28px 24px",
+                maxWidth:400, width:"100%",
+                boxShadow:"0 24px 60px rgba(0,0,0,0.6)",
+              }}
+            >
+              <div style={{ fontSize:40, textAlign:"center", marginBottom:12, lineHeight:1 }}>{emoji}</div>
+              <div style={{ fontSize:16, fontWeight:400, color:T.textPrimary, textAlign:"center", marginBottom:6, lineHeight:1.3 }}>
+                {nome}
+              </div>
+              <div style={{ fontSize:12, color:T.textSecondary, textAlign:"center", marginBottom:24, lineHeight:1.6 }}>
+                O que você deseja fazer com este objetivo?
+              </div>
+
+              <button
+                onClick={() => { const i = confirmAcao; setConfirmAcao(null); navigate(`/objetivo/${id}/${i}`); }}
+                style={{
+                  width:"100%", padding:"13px 16px", marginBottom:10,
+                  background:T.goldDim, border:`1px solid ${T.goldBorder}`,
+                  borderRadius:T.radiusMd, color:T.gold,
+                  fontSize:11, letterSpacing:"0.14em", textTransform:"uppercase",
+                  cursor:"pointer", fontFamily:T.fontFamily,
+                }}
+              >
+                Editar objetivo
+              </button>
+
+              <button
+                onClick={() => { const i = confirmAcao; setConfirmAcao(null); deletar(i); }}
+                style={{
+                  width:"100%", padding:"13px 16px", marginBottom:10,
+                  background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.35)",
+                  borderRadius:T.radiusMd, color:"#ef4444",
+                  fontSize:11, letterSpacing:"0.14em", textTransform:"uppercase",
+                  cursor:"pointer", fontFamily:T.fontFamily,
+                }}
+              >
+                Excluir objetivo
+              </button>
+
+              <button
+                onClick={() => setConfirmAcao(null)}
+                style={{
+                  width:"100%", padding:"12px 16px",
+                  background:"transparent", border:`0.5px solid ${T.border}`,
+                  borderRadius:T.radiusMd, color:T.textMuted,
+                  fontSize:11, letterSpacing:"0.14em", textTransform:"uppercase",
+                  cursor:"pointer", fontFamily:T.fontFamily,
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       <BotoesNavegacao />
     </div>
   );
@@ -1012,13 +1166,18 @@ export default function Objetivos() {
             </button>
           )}
           {etapa < 4 && (() => {
-            const bloqueadoEtapa1 = etapa === 1 && !form.meta;
+            const metaVazia = parseCentavos(form.meta) <= 0;
+            const nomeVazio = form.tipo === "personalizado" && !String(form.nomeCustom || "").trim();
+            const rendaVazia = form.tipo === "aposentadoria" && parseCentavos(form.rendaMensal) <= 0;
+            const bloqueadoEtapa1 = etapa === 1 && (metaVazia || nomeVazio || rendaVazia);
             const semPatrim = parseCentavos(form.patrimAtual) <= 0;
             const semAtivos = ativosSelecionados.size === 0;
+            const semAporte = parseCentavos(form.aporte) <= 0;
             const bloqueadoEtapa2 = etapa === 2 && (
-              patrimSource === "manual" ? semPatrim : semAtivos
+              (patrimSource === "manual" ? semPatrim : semAtivos) || semAporte
             );
-            const bloqueado = bloqueadoEtapa1 || bloqueadoEtapa2;
+            const bloqueadoEtapa3 = etapa === 3 && (parseInt(form.prazo) || 0) <= 0;
+            const bloqueado = bloqueadoEtapa1 || bloqueadoEtapa2 || bloqueadoEtapa3;
             return (
               <button
                 style={{
@@ -1033,10 +1192,20 @@ export default function Objetivos() {
                 onClick={() => { if (!bloqueado) setEtapa(e => e + 1); }}
                 disabled={bloqueado}
                 title={
-                  bloqueadoEtapa2 && patrimSource === "ativos"
+                  bloqueadoEtapa1 && rendaVazia
+                    ? "Informe a renda mensal desejada"
+                    : bloqueadoEtapa1 && nomeVazio
+                    ? "Informe o nome do objetivo"
+                    : bloqueadoEtapa1
+                    ? "Informe a meta financeira"
+                    : bloqueadoEtapa2 && semAporte && (patrimSource === "manual" ? !semPatrim : !semAtivos)
+                    ? "Informe o aporte mensal"
+                    : bloqueadoEtapa2 && patrimSource === "ativos"
                     ? "Selecione pelo menos um ativo ou troque para valor manual"
                     : bloqueadoEtapa2
                     ? "Informe o patrimônio já acumulado ou vincule ativos financeiros"
+                    : bloqueadoEtapa3
+                    ? "Informe o prazo desejado em anos"
                     : undefined
                 }
               >

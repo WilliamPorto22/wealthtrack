@@ -115,6 +115,11 @@ export default function ObjetivoDetalhes() {
   const [salvandoAtivos, setSalvandoAtivos] = useState(false);
   const [confirmTransferAtivo, setConfirmTransferAtivo] = useState(null);
 
+  // Edição do objetivo (meta, aporte, prazo, patrimônio, nome)
+  const [editandoObj, setEditandoObj] = useState(false);
+  const [formEditObj, setFormEditObj] = useState({});
+  const [salvandoEditObj, setSalvandoEditObj] = useState(false);
+
   async function carregarCliente() {
     try {
       const snap = await getDoc(doc(db, "clientes", clienteId));
@@ -267,6 +272,53 @@ export default function ObjetivoDetalhes() {
     setModalAtivos(false);
   }
 
+  function abrirEdicaoObj() {
+    setFormEditObj({
+      nomeCustom: objetivo.nomeCustom || "",
+      meta: objetivo.meta || "",
+      rendaMensal: objetivo.rendaMensal || "",
+      patrimAtual: objetivo.patrimAtual || "",
+      aporte: objetivo.aporte || "",
+      prazo: objetivo.prazo || "",
+    });
+    setEditandoObj(true);
+  }
+
+  async function salvarEdicaoObj() {
+    const metaCent = parseCentavos(formEditObj.meta);
+    const aporteCent = parseCentavos(formEditObj.aporte);
+    const prazoN = parseInt(formEditObj.prazo) || 0;
+    if (metaCent <= 0 || aporteCent <= 0 || prazoN <= 0) return;
+    if (objetivo.tipo === "personalizado" && !String(formEditObj.nomeCustom || "").trim()) return;
+    if (objetivo.patrimSource !== "ativos" && parseCentavos(formEditObj.patrimAtual) <= 0) return;
+
+    setSalvandoEditObj(true);
+    try {
+      const snap = await getDoc(doc(db, "clientes", clienteId));
+      if (snap.exists()) {
+        const dados = snap.data();
+        const objs = [...(dados.objetivos || [])];
+        const idx = parseInt(objetivoIndex);
+        objs[idx] = {
+          ...objs[idx],
+          nomeCustom: formEditObj.nomeCustom || objs[idx].nomeCustom || "",
+          meta: String(metaCent),
+          rendaMensal: formEditObj.rendaMensal ? String(parseCentavos(formEditObj.rendaMensal)) : objs[idx].rendaMensal,
+          patrimAtual: String(parseCentavos(formEditObj.patrimAtual)),
+          aporte: String(aporteCent),
+          prazo: String(prazoN),
+        };
+        await setDoc(doc(db, "clientes", clienteId), { ...dados, objetivos: objs });
+        setObjetivo(objs[idx]);
+        setCliente({ ...dados, objetivos: objs });
+        setEditandoObj(false);
+      }
+    } catch (e) {
+      console.error("Erro ao salvar edição do objetivo:", e);
+    }
+    setSalvandoEditObj(false);
+  }
+
   async function salvarMesHistorico(mesAnoKey, dados) {
     setSalvandoMes(true);
     try {
@@ -354,23 +406,42 @@ export default function ObjetivoDetalhes() {
             {prazo} {prazo === 1 ? "ano" : "anos"}
           </div>
         </div>
-        <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginBottom: 6, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-            Status
+        <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+          <div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginBottom: 6, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              Status
+            </div>
+            <div style={{
+              fontSize: 14,
+              fontWeight: 600,
+              padding: "7px 16px",
+              background: `${cor}20`,
+              color: cor,
+              border: `1px solid ${cor}45`,
+              borderRadius: 20,
+              display: "inline-block",
+              letterSpacing: "0.01em",
+            }}>
+              {status === "viavel" ? "✓" : status === "ajustavel" ? "⚠" : "✕"} {labelStatus[status]}
+            </div>
           </div>
-          <div style={{
-            fontSize: 14,
-            fontWeight: 600,
-            padding: "7px 16px",
-            background: `${cor}20`,
-            color: cor,
-            border: `1px solid ${cor}45`,
-            borderRadius: 20,
-            display: "inline-block",
-            letterSpacing: "0.01em",
-          }}>
-            {status === "viavel" ? "✓" : status === "ajustavel" ? "⚠" : "✕"} {labelStatus[status]}
-          </div>
+          <button
+            onClick={abrirEdicaoObj}
+            style={{
+              fontSize: 11,
+              padding: "7px 14px",
+              background: "rgba(255,255,255,0.12)",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.25)",
+              borderRadius: 20,
+              cursor: "pointer",
+              fontFamily: T.fontFamily,
+              letterSpacing: "0.06em",
+              fontWeight: 500,
+            }}
+          >
+            Editar objetivo
+          </button>
         </div>
       </div>
 
@@ -2179,6 +2250,138 @@ export default function ObjetivoDetalhes() {
         </div>
       </div>
       {ModalVincularAtivos()}
+
+      {/* Modal edição do objetivo */}
+      {editandoObj && (() => {
+        const metaCent = parseCentavos(formEditObj.meta);
+        const aporteCent = parseCentavos(formEditObj.aporte);
+        const patrimCent = parseCentavos(formEditObj.patrimAtual);
+        const prazoN = parseInt(formEditObj.prazo) || 0;
+        const faltaNome = objetivo.tipo === "personalizado" && !String(formEditObj.nomeCustom || "").trim();
+        const precisaPatrim = objetivo.patrimSource !== "ativos";
+        const invalido = metaCent <= 0 || aporteCent <= 0 || prazoN <= 0 || faltaNome || (precisaPatrim && patrimCent <= 0);
+
+        const campoMoeda = (label, key, obs) => (
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ ...C.label, display: "block", marginBottom: 6 }}>{label}</label>
+            <input
+              style={{ ...C.input, fontSize: 15, padding: "12px 14px" }}
+              type="text"
+              inputMode="numeric"
+              placeholder="R$ 0"
+              value={formEditObj[key] ? (parseCentavos(formEditObj[key]) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""}
+              onChange={e => {
+                const centavos = parseCentavos(e.target.value);
+                setFormEditObj(f => ({ ...f, [key]: String(centavos) }));
+              }}
+            />
+            {obs && <div style={{ fontSize: 10, color: T.textMuted, marginTop: 5, lineHeight: 1.5 }}>{obs}</div>}
+          </div>
+        );
+
+        return (
+          <div
+            onClick={() => !salvandoEditObj && setEditandoObj(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 200,
+              background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: 20, overflowY: "auto",
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: T.cardBg || "#111",
+                border: `0.5px solid ${T.border}`,
+                borderRadius: T.radiusLg || 16,
+                padding: "28px 26px",
+                maxWidth: 480, width: "100%",
+                maxHeight: "90vh", overflowY: "auto",
+                boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+              }}
+            >
+              <div style={{ fontSize: 30, textAlign: "center", marginBottom: 10, lineHeight: 1 }}>{emoji}</div>
+              <div style={{ fontSize: 17, fontWeight: 400, color: T.textPrimary, textAlign: "center", marginBottom: 4, lineHeight: 1.3 }}>
+                Editar objetivo
+              </div>
+              <div style={{ fontSize: 12, color: T.textSecondary, textAlign: "center", marginBottom: 22, lineHeight: 1.5 }}>
+                Ajuste os valores para refinar o plano.
+              </div>
+
+              {objetivo.tipo === "personalizado" && (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ ...C.label, display: "block", marginBottom: 6 }}>Nome do objetivo</label>
+                  <input
+                    style={{ ...C.input, fontSize: 14, padding: "12px 14px" }}
+                    placeholder="Ex: Viagem para o Canadá"
+                    value={formEditObj.nomeCustom || ""}
+                    onChange={e => setFormEditObj(f => ({ ...f, nomeCustom: e.target.value }))}
+                  />
+                </div>
+              )}
+
+              {objetivo.tipo === "aposentadoria" && campoMoeda("Renda mensal desejada", "rendaMensal", "Ao alterar, a meta de patrimônio é recalculada automaticamente — ajuste abaixo se preferir.")}
+
+              {campoMoeda("Meta (patrimônio total)", "meta")}
+
+              {precisaPatrim
+                ? campoMoeda("Patrimônio já acumulado", "patrimAtual", "Este objetivo usa valor manual. Para vincular ativos da carteira, use a aba Ativos.")
+                : (
+                  <div style={{ marginBottom: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", border: `0.5px solid ${T.border}`, borderRadius: T.radiusMd, fontSize: 11, color: T.textMuted, lineHeight: 1.6 }}>
+                    Patrimônio vinculado a ativos da carteira. Para alterar a seleção, use a aba <b style={{ color: T.textSecondary }}>Ativos</b>.
+                  </div>
+                )
+              }
+
+              {campoMoeda("Aporte mensal", "aporte")}
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ ...C.label, display: "block", marginBottom: 6 }}>Prazo (anos)</label>
+                <input
+                  style={{ ...C.input, fontSize: 15, padding: "12px 14px" }}
+                  type="number"
+                  placeholder="Ex: 10"
+                  value={formEditObj.prazo || ""}
+                  onChange={e => setFormEditObj(f => ({ ...f, prazo: e.target.value }))}
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={() => setEditandoObj(false)}
+                  disabled={salvandoEditObj}
+                  style={{
+                    flex: 1, padding: "12px 16px",
+                    background: "transparent", border: `0.5px solid ${T.border}`,
+                    borderRadius: T.radiusMd, color: T.textMuted,
+                    fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase",
+                    cursor: salvandoEditObj ? "not-allowed" : "pointer", fontFamily: T.fontFamily,
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={salvarEdicaoObj}
+                  disabled={invalido || salvandoEditObj}
+                  style={{
+                    flex: 1, padding: "12px 16px",
+                    background: invalido ? "rgba(255,255,255,0.03)" : T.goldDim,
+                    border: invalido ? `1px solid ${T.border}` : `1px solid ${T.goldBorder}`,
+                    borderRadius: T.radiusMd,
+                    color: invalido ? T.textMuted : T.gold,
+                    fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase",
+                    cursor: invalido || salvandoEditObj ? "not-allowed" : "pointer",
+                    fontFamily: T.fontFamily,
+                  }}
+                >
+                  {salvandoEditObj ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
