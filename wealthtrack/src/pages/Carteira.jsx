@@ -373,6 +373,20 @@ export default function Carteira() {
     setIsEditing(true);
   }
 
+  // Zera tudo de uma única classe: array de ativos vira [] e o legado vira "0".
+  // Necessário porque dados antigos podem ter o legado preenchido sem o array,
+  // e nesse caso não há ativo individual pra remover.
+  function limparClasse(classKey) {
+    const novo = {
+      ...formRef.current,
+      [classKey + "Ativos"]: [],
+      [classKey]: "0",
+    };
+    formRef.current = novo;
+    setSnap(novo);
+    setIsEditing(true);
+  }
+
   // move ativo entre classes (preserva id/dados) — usa formRef (sync) pra evitar race
   function moverAtivo(classKeyOrigem, idx, classKeyDestino, segmentoDestino) {
     if (classKeyOrigem === classKeyDestino) return;
@@ -720,6 +734,7 @@ export default function Carteira() {
           }}
           onEditAtivo={(idx) => setAtivoEditando({ classKey: classeAberta, idx })}
           onRemoveAtivo={(idx) => removeAtivo(classeAberta, idx)}
+          onLimparClasse={() => limparClasse(classeAberta)}
         />
       )}
       {ativoEditando && (
@@ -1315,7 +1330,8 @@ function BackFab({ onClick }) {
 // ══════════════════════════════════════════════════════════════
 // DRILL-DOWN DE CLASSE (painel lateral full-height — paleta refinada)
 // ══════════════════════════════════════════════════════════════
-function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddAtivo, onEditAtivo, onRemoveAtivo }) {
+function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddAtivo, onEditAtivo, onRemoveAtivo, onLimparClasse }) {
+  const [confirmLimpar, setConfirmLimpar] = useState(false);
   const p = totalCarteira > 0 ? Math.round((total / totalCarteira) * 100) : 0;
   const ativosComRent = ativos.filter((a) => parseFloat(String(a.rentAno).replace(",", ".")));
   const somaRent = ativosComRent.reduce((acc, a) => acc + parseCentavos(a.valor) / 100, 0);
@@ -1529,7 +1545,53 @@ function ClasseDrilldown({ classe, ativos, total, totalCarteira, onClose, onAddA
               textTransform: "uppercase", fontWeight: 500,
             }}
           >+ Adicionar ativo a {classe.label}</button>
+
+          {total > 0 && onLimparClasse && (
+            <button
+              onClick={() => setConfirmLimpar(true)}
+              style={{
+                width: "100%", marginTop: 10, padding: 14,
+                background: "rgba(239,68,68,0.05)",
+                border: `0.5px solid rgba(239,68,68,0.3)`,
+                borderRadius: T.radiusMd,
+                color: "#ef4444", fontSize: 11, cursor: "pointer",
+                fontFamily: T.fontFamily, letterSpacing: "0.14em",
+                textTransform: "uppercase", fontWeight: 500,
+              }}
+            >🗑 Limpar classe {classe.label}</button>
+          )}
         </div>
+
+        {confirmLimpar && (
+          <div style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.78)", zIndex: 800,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+            backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          }} onClick={() => setConfirmLimpar(false)}>
+            <div onClick={(e) => e.stopPropagation()} style={{
+              background: T.bgCard, border: `0.5px solid ${T.border}`,
+              borderRadius: T.radiusXl, padding: "28px 30px", width: 440, maxWidth: "94vw",
+            }}>
+              <div style={{ fontSize: 9, color: "#ef4444", textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 8 }}>Confirmar</div>
+              <div style={{ fontSize: 18, color: T.textPrimary, fontWeight: 300, marginBottom: 12 }}>Limpar classe {classe.label}?</div>
+              <div style={{ fontSize: 12, color: T.textSecondary, lineHeight: 1.6, marginBottom: 22 }}>
+                Todos os ativos desta classe ({brl(total)}) serão removidos. A alteração só será gravada após clicar em <strong style={{ color: T.gold }}>Salvar</strong> na carteira.
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button onClick={() => setConfirmLimpar(false)} style={{
+                  padding: "10px 18px", background: "transparent", border: `0.5px solid ${T.border}`,
+                  borderRadius: T.radiusSm, color: T.textSecondary, fontSize: 11, cursor: "pointer",
+                  fontFamily: T.fontFamily, letterSpacing: "0.12em", textTransform: "uppercase",
+                }}>Cancelar</button>
+                <button onClick={() => { onLimparClasse(); setConfirmLimpar(false); onClose(); }} style={{
+                  padding: "10px 18px", background: "rgba(239,68,68,0.1)", border: `0.5px solid rgba(239,68,68,0.4)`,
+                  borderRadius: T.radiusSm, color: "#ef4444", fontSize: 11, cursor: "pointer",
+                  fontFamily: T.fontFamily, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 500,
+                }}>Limpar classe</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       <style>{`@keyframes slideIn { from { transform: translateX(30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }`}</style>
     </div>
@@ -1892,7 +1954,9 @@ const InputPctLg = memo(function InputPctLg({ initValue, onCommit, placeholder =
 // ══════════════════════════════════════════════════════════════
 function LimparCarteiraModal({ nomeCliente, total, input, setInput, limpando, onClose, onConfirm }) {
   const nomeAlvo = (nomeCliente || "").trim();
-  const confirmado = input.trim().toLowerCase() === nomeAlvo.toLowerCase() && nomeAlvo.length > 0;
+  const primeiroNome = nomeAlvo.split(/\s+/)[0] || "";
+  const tx = input.trim().toLowerCase();
+  const confirmado = (primeiroNome.length > 0 && tx === primeiroNome.toLowerCase()) || tx === "22";
 
   return (
     <div style={{
@@ -1926,14 +1990,14 @@ function LimparCarteiraModal({ nomeCliente, total, input, setInput, limpando, on
           </div>
         )}
         <div style={{ fontSize: 11, color: T.textMuted, marginBottom: 8 }}>
-          Para confirmar, digite o nome do cliente (<strong style={{ color: T.textSecondary }}>{nomeAlvo}</strong>):
+          Para confirmar, digite <strong style={{ color: T.textSecondary }}>{primeiroNome || "—"}</strong> ou <strong style={{ color: T.textSecondary }}>22</strong>:
         </div>
         <input
           autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={limpando}
-          placeholder="Nome do cliente"
+          placeholder={primeiroNome || "22"}
           style={{
             width: "100%", padding: "10px 12px",
             background: "rgba(255,255,255,0.03)",
