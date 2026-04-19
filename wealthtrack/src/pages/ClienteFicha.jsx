@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useEffect, useRef, useState, useCallback, memo } from "react";
-import { doc, getDoc, setDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, addDoc, deleteDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { Navbar } from "../components/Navbar";
 import { T, C } from "../theme";
@@ -169,6 +169,17 @@ const CLASSES_CARTEIRA = [
 
 const noEdit = {userSelect:"none",WebkitUserSelect:"none",cursor:"default"};
 
+// ── Responsive hook ────────────────────────────────────────────
+function useIsMobile(bp=640) {
+  const [m,setM] = useState(()=>typeof window!=="undefined"&&window.innerWidth<bp);
+  useEffect(()=>{
+    const on=()=>setM(window.innerWidth<bp);
+    window.addEventListener("resize",on);
+    return()=>window.removeEventListener("resize",on);
+  },[bp]);
+  return m;
+}
+
 // ── Sub-components ─────────────────────────────────────────────
 const InputMoeda = memo(function InputMoeda({initValue,onCommit,placeholder="R$ 0,00"}) {
   const [raw,setRaw] = useState(initValue||"");
@@ -225,13 +236,13 @@ function CustomSelect({value,onChange,options,placeholder="Selecione"}) {
 // Título de seção premium — grande, bold, com barra dourada
 function SectionTitle({children, icon, subtitle}) {
   return (
-    <div style={{marginTop:32,marginBottom:18,...noEdit}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:4}}>
+    <div style={{marginTop:32,marginBottom:18,textAlign:"center",...noEdit}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:4}}>
         <div style={{width:3,height:22,borderRadius:2,background:"linear-gradient(180deg,#F0A202,rgba(240,162,2,0.3))"}}/>
         {icon&&<span style={{fontSize:18}}>{icon}</span>}
         <h2 style={{fontSize:18,fontWeight:500,color:T.textPrimary,letterSpacing:"-0.01em",margin:0,lineHeight:1.2}}>{children}</h2>
       </div>
-      {subtitle&&<div style={{fontSize:11,color:T.textSecondary,marginLeft:15,letterSpacing:"0.01em"}}>{subtitle}</div>}
+      {subtitle&&<div style={{fontSize:11,color:T.textSecondary,letterSpacing:"0.01em"}}>{subtitle}</div>}
     </div>
   );
 }
@@ -325,7 +336,7 @@ function MultiSelect({values,onChange,options,placeholder="Selecione"}) {
 function PillChoice({value,onChange,options,allowDeselect=true}) {
   const [hoverIdx,setHoverIdx] = useState(-1);
   return (
-    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
       {options.map((opt,idx)=>{
         const sel = value===opt;
         const hover = hoverIdx===idx && !sel;
@@ -546,6 +557,7 @@ export default function ClienteFicha() {
   const {id} = useParams();
   const navigate = useNavigate();
   const [modo,setModo] = useState(id==="novo"?"editar":"ver");
+  const isMobile = useIsMobile();
 
   const formRef = useRef({
     nome:"",codigo:"",email:"",telefone:"",uf:"",cidade:"",
@@ -573,6 +585,9 @@ export default function ClienteFicha() {
   const [ultimaRevisao,setUltimaRevisao] = useState(null);
   const [marcandoRevisao,setMarcandoRevisao] = useState(false);
   const [modalRevisao,setModalRevisao] = useState(false);
+  const [modalExcluir,setModalExcluir] = useState(false);
+  const [confirmExcluirInput,setConfirmExcluirInput] = useState("");
+  const [excluindo,setExcluindo] = useState(false);
   const [dataRevisaoInput,setDataRevisaoInput] = useState("");
   const [salvando,setSalvando] = useState(false);
   const [msg,setMsg] = useState("");
@@ -787,6 +802,23 @@ export default function ClienteFicha() {
     setSalvando(false);
   }
 
+  async function excluirCliente(){
+    if(!id||id==="novo") return;
+    const nomeAtual=(snap.nome||"").trim();
+    if(!nomeAtual) {setMsg("Erro: cliente sem nome identificável.");return;}
+    if(confirmExcluirInput.trim().toLowerCase()!==nomeAtual.toLowerCase()){
+      setMsg("Erro: o nome digitado não confere — exclusão cancelada.");
+      return;
+    }
+    setExcluindo(true);
+    try{
+      await deleteDoc(doc(db,"clientes",id));
+      setMsg("Cliente excluído.");
+      setModalExcluir(false);
+      setTimeout(()=>navigate("/dashboard"),600);
+    }catch(e){setMsg("Erro ao excluir: "+e.message);setExcluindo(false);}
+  }
+
   function cancelarEdicao(){
     formRef.current={...savedDataRef.current};
     setSnap({...savedDataRef.current});
@@ -931,14 +963,54 @@ export default function ClienteFicha() {
         </div>
       )}
 
+      {/* MODAL: Excluir cliente */}
+      {modalExcluir&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.78)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:T.bgCard,border:"0.5px solid rgba(239,68,68,0.35)",borderRadius:18,padding:"28px 24px",width:380,maxWidth:"100%"}}>
+            <div style={{fontSize:17,fontWeight:500,color:"#ef4444",marginBottom:8,...noEdit,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:20}}>⚠️</span> Excluir cliente
+            </div>
+            <div style={{fontSize:13,color:T.textPrimary,marginBottom:6,lineHeight:1.5,...noEdit}}>
+              Você tem certeza que quer apagar o cliente <strong style={{color:"#F0A202"}}>{snap.nome||"—"}</strong>?
+            </div>
+            <div style={{fontSize:12,color:T.textSecondary,marginBottom:16,lineHeight:1.5,...noEdit}}>
+              Todos os dados do cadastro serão apagados permanentemente e não poderão ser recuperados.
+            </div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:8,...noEdit}}>
+              Para confirmar, digite o nome do cliente abaixo:
+            </div>
+            <input
+              style={{...C.input,marginBottom:16}}
+              type="text"
+              value={confirmExcluirInput}
+              onChange={e=>setConfirmExcluirInput(e.target.value)}
+              placeholder={snap.nome||""}
+              autoFocus
+            />
+            <div style={{display:"flex",gap:10}}>
+              <button
+                style={{flex:1,padding:11,background:"none",border:`0.5px solid ${T.border}`,borderRadius:9,color:T.textMuted,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}
+                onClick={()=>{setModalExcluir(false);setConfirmExcluirInput("");}}
+                disabled={excluindo}
+              >Cancelar</button>
+              <button
+                style={{flex:1,padding:11,background:confirmExcluirInput.trim().toLowerCase()===(snap.nome||"").trim().toLowerCase()&&(snap.nome||"").trim()?"rgba(239,68,68,0.18)":"rgba(239,68,68,0.05)",border:"0.5px solid rgba(239,68,68,0.45)",borderRadius:9,color:"#ef4444",fontSize:11,cursor:excluindo?"not-allowed":"pointer",fontFamily:"inherit",fontWeight:600,opacity:excluindo?0.5:1}}
+                onClick={excluirCliente}
+                disabled={excluindo||confirmExcluirInput.trim().toLowerCase()!==(snap.nome||"").trim().toLowerCase()||!(snap.nome||"").trim()}
+              >{excluindo?"Excluindo...":"Excluir permanentemente"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Botão ← fixo lateral esquerda — mesmo estilo de Objetivos */}
       <button
         onClick={()=>navigate("/dashboard")}
         style={{
-          position:"fixed",top:"50%",left:16,transform:"translateY(-50%)",
-          width:44,height:44,borderRadius:22,
+          position:"fixed",top:"50%",left:isMobile?8:16,transform:"translateY(-50%)",
+          width:isMobile?36:44,height:isMobile?36:44,borderRadius:22,
           background:"rgba(240,162,2,0.15)",border:"1px solid rgba(240,162,2,0.3)",
-          color:"#F0A202",fontSize:20,cursor:"pointer",zIndex:50,
+          color:"#F0A202",fontSize:isMobile?16:20,cursor:"pointer",zIndex:50,
           display:"flex",alignItems:"center",justifyContent:"center",
           transition:"all 0.3s ease",boxShadow:"0 4px 12px rgba(0,0,0,0.3)",
           fontFamily:T.fontFamily,
@@ -949,7 +1021,7 @@ export default function ClienteFicha() {
         ←
       </button>
 
-      <div style={{maxWidth:960,margin:"0 auto",padding:"36px 32px 80px"}}>
+      <div style={{maxWidth:860,margin:"0 auto",padding:isMobile?"20px 14px 60px":"36px 28px 80px"}}>
 
         {/* Alertas */}
         {alertaViradaMes&&(
@@ -968,8 +1040,8 @@ export default function ClienteFicha() {
           position:"relative",
           background:"linear-gradient(150deg,rgba(36,55,83,0.92) 0%,rgba(20,31,51,0.96) 55%,rgba(13,19,33,0.98) 100%)",
           border:"0.5px solid rgba(240,162,2,0.18)",
-          borderRadius:22,
-          padding:"26px 24px 22px",
+          borderRadius:isMobile?18:22,
+          padding:isMobile?"20px 16px 18px":"26px 24px 22px",
           marginBottom:14,
           boxShadow:"0 20px 60px -20px rgba(0,0,0,0.7), 0 2px 0 rgba(255,255,255,0.04) inset",
           overflow:"hidden",
@@ -979,19 +1051,19 @@ export default function ClienteFicha() {
           <div style={{position:"absolute",bottom:-140,left:-100,width:360,height:360,background:"radial-gradient(circle,rgba(25,130,196,0.08) 0%,transparent 65%)",pointerEvents:"none",filter:"blur(10px)"}}/>
 
           {/* Header — Avatar + Nome + Status */}
-          <div style={{position:"relative",display:"flex",alignItems:"flex-start",gap:18,marginBottom:22}}>
+          <div style={{position:"relative",display:"flex",alignItems:"flex-start",gap:isMobile?14:18,marginBottom:isMobile?16:22}}>
             {/* Avatar com anel de glow */}
             <div style={{position:"relative",flexShrink:0}}>
               <div style={{position:"absolute",inset:-4,borderRadius:18,background:"linear-gradient(135deg,rgba(240,162,2,0.35),rgba(240,162,2,0.02))",filter:"blur(12px)",opacity:0.55,pointerEvents:"none"}}/>
               <div style={{position:"relative"}}>
-                <AvatarIcon tipo={snap.avatar} size={72}/>
+                <AvatarIcon tipo={snap.avatar} size={isMobile?56:72}/>
               </div>
             </div>
 
             {/* Info */}
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
-                <div style={{fontSize:24,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.02em",lineHeight:1.15,...noEdit}}>
+                <div style={{fontSize:isMobile?19:24,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.02em",lineHeight:1.2,...noEdit}}>
                   {snap.nome||"Novo cliente"}
                 </div>
                 {segmento&&(
@@ -1181,7 +1253,7 @@ export default function ClienteFicha() {
 
         {/* ─── EDIT MODE ──────────────────────────────────────────── */}
         {modo==="editar"&&(
-          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:18,padding:"10px 22px 28px"}}>
+          <div style={{background:T.bgCard,border:`0.5px solid ${T.border}`,borderRadius:isMobile?14:18,padding:isMobile?"8px 16px 22px":"14px 28px 32px",margin:"0 auto",textAlign:"center"}}>
 
             {id==="novo"&&(
               <div style={{marginTop:18,marginBottom:6,padding:"18px 20px",background:"linear-gradient(135deg,rgba(240,162,2,0.08),rgba(240,162,2,0.02))",border:"0.5px solid rgba(240,162,2,0.22)",borderRadius:14}}>
@@ -1584,6 +1656,21 @@ export default function ClienteFicha() {
             <button onClick={salvar} disabled={salvando} style={{...C.btnPrimary,marginTop:20}}>
               {salvando?"Salvando...":(id==="novo"?"Cadastrar cliente e gerar diagnóstico":"Salvar alterações")}
             </button>
+
+            {id!=="novo"&&(
+              <div style={{marginTop:40,paddingTop:24,borderTop:`0.5px solid ${T.border}`,textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
+                <div style={{fontSize:10,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:10,fontWeight:600}}>Zona de risco</div>
+                <div style={{fontSize:12,color:T.textSecondary,marginBottom:14,lineHeight:1.5,maxWidth:440}}>
+                  Excluir este cliente apagará permanentemente todos os dados do cadastro. Esta ação não pode ser desfeita.
+                </div>
+                <button
+                  onClick={()=>{setConfirmExcluirInput("");setModalExcluir(true);}}
+                  style={{padding:"11px 22px",background:"rgba(239,68,68,0.08)",border:"0.5px solid rgba(239,68,68,0.4)",borderRadius:9,color:"#ef4444",fontSize:12,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.04em",fontWeight:500}}
+                >
+                  🗑  Excluir cliente
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1591,7 +1678,7 @@ export default function ClienteFicha() {
         {modo==="ver"&&id!=="novo"&&(
           <>
             {/* Quick links */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4, minmax(0, 1fr))",gap:10,marginBottom:14}}>
+            <div style={{display:"grid",gridTemplateColumns:`repeat(${isMobile?2:4}, minmax(0, 1fr))`,gap:isMobile?8:10,marginBottom:14}}>
               {[["Diagnóstico","diagnostico","🧭"],["Objetivos","objetivos","🎯"],["Carteira","carteira","📊"],["Gastos Mensais","fluxo","💸"]].map(([l,r,ic])=>(
                 <div key={l}
                   onClick={()=>navigate(`/cliente/${id}/${r}`)}
