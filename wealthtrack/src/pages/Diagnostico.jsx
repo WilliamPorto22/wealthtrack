@@ -157,12 +157,19 @@ function analisar(cliente) {
   // Se o cliente informou liquidez diária, usamos ela como proxy de reserva; caso contrário, pat. financeiro
   const reservaAtual = liquidezDiaria>0?liquidezDiaria:patrimonioFinanceiro;
   const mesesCobertos = gastos>0?reservaAtual/gastos:0;
+  // Dependentes → precisa de seguro e sucessão
+  const temDependentes = temConjuge||temFilhosDep;
+  const temSeguroVidaFlag = cliente.temSeguroVida===true;
+  const temPlanoSucessorioFlag = cliente.temPlanoSucessorio===true;
+  const temPrevidenciaFlag = cliente.temPrevidencia===true;
   const protecoes = {
     reserva: reservaAtual>=reservaIdeal&&reservaIdeal>0,
     seguroCarro: veiculos.length===0||temSeguroCarro,
-    seguroVida: false, // sem campo ainda
-    previdencia: false, // detectar via carteira no futuro
-    sucessao: !(temFilhosDep||temConjuge)||patrimonioTotal<500000,
+    // Se não tem dependentes, seguro de vida é opcional; se tem, depende do que marcou
+    seguroVida: !temDependentes ? true : temSeguroVidaFlag,
+    previdencia: temPrevidenciaFlag,
+    // Se não há dependentes E patrimônio pequeno → ok; caso contrário, depende do que marcou
+    sucessao: (!temDependentes && patrimonioTotal<500000) || temPlanoSucessorioFlag,
   };
 
   // ═══ SCORE FINANCEIRO ═══ (0-100 com sub-notas)
@@ -194,9 +201,11 @@ function analisar(cliente) {
 
   // 4. Proteção (0-15)
   let scoreProt = 0;
-  if(protecoes.reserva) scoreProt+=5;
-  if(protecoes.seguroCarro) scoreProt+=5;
-  if(protecoes.sucessao) scoreProt+=5;
+  if(protecoes.reserva) scoreProt+=4;
+  if(protecoes.seguroCarro) scoreProt+=3;
+  if(protecoes.seguroVida) scoreProt+=3;
+  if(protecoes.sucessao) scoreProt+=3;
+  if(protecoes.previdencia) scoreProt+=2;
 
   // 5. Objetivos e planejamento (0-15)
   let scorePlan = 0;
@@ -264,16 +273,14 @@ function analisar(cliente) {
     });
   }
 
-  if(rentAnual>0&&rentAnual<8) {
-    const deltaVs12 = projetarPatrimonio(patrimonioFinanceiro, aporteUsado, 12-4, 10) - projetarPatrimonio(patrimonioFinanceiro, aporteUsado, rentAnual-4, 10);
-    insights.push({nivel:"alto",icon:"📉",titulo:"Rentabilidade abaixo do mercado",
-      texto:`Você rende ${rentAnual.toFixed(1)}% a.a. — abaixo do CDI (~11%). Em 10 anos, diferença para uma carteira de 12% bem estruturada: +${moedaFull(deltaVs12)} a mais no patrimônio, mesmo risco similar.`,
-      cta:"Reposicionamento de carteira com mesmo risco + maior retorno.",
-    });
-  } else if(rentAnual>0&&rentAnual<11) {
-    insights.push({nivel:"medio",icon:"📊",titulo:"Rentabilidade na média",
-      texto:`${rentAnual.toFixed(1)}% a.a. é razoável, mas estruturando carteira diversificada (nacional + global + renda variável proporcional ao perfil), podemos buscar 12-14% com risco controlado.`,
-      cta:"Diversificação internacional e eficiência fiscal (VGBL/LCA/LCI).",
+  if(rentAnual>0&&rentAnual<12) {
+    const deltaVs12 = projetarPatrimonio(patrimonioFinanceiro, aporteUsado, 12-4, 10) - projetarPatrimonio(patrimonioFinanceiro, aporteUsado, Math.max(rentAnual-4,1), 10);
+    const anosRent = anosParaAtingir(patrimonioFinanceiro, aporteUsado, Math.max(rentAnual-4,1), magicNumber);
+    const anos12 = anosParaAtingir(patrimonioFinanceiro, aporteUsado, 12-4, magicNumber);
+    const atrasoEmAnos = anosRent&&anos12?(anosRent-anos12):null;
+    insights.push({nivel:"alto",icon:"📉",titulo:`Rentabilidade de ${rentAnual.toFixed(1)}% a.a. — atrasa sua liberdade`,
+      texto:`O mercado bem estruturado entrega 12-14% a.a. com risco controlado. Sua rentabilidade atual representa ${moedaFull(deltaVs12)} deixados na mesa em 10 anos.${atrasoEmAnos&&atrasoEmAnos>0?` E mais: você atinge sua liberdade financeira ${atrasoEmAnos.toFixed(1)} anos mais tarde do que poderia.`:""}`,
+      cta:"Ver sua carteira e reposicionar sem mudar perfil de risco.",
     });
   }
 
@@ -320,11 +327,29 @@ function analisar(cliente) {
     }
   }
 
-  if((temConjuge||temFilhosDep)&&patrimonioTotal>100000) {
+  // Sucessão — só alertar se tem dependentes E não tem plano sucessório
+  if(temDependentes&&!temPlanoSucessorioFlag&&patrimonioTotal>100000) {
     const custoInventario = patrimonioTotal*0.12; // estimativa média
-    insights.push({nivel:"medio",icon:"👨‍👩‍👧",titulo:"Sucessão patrimonial",
-      texto:`Com ${temFilhosDep?`${filhos.length} filho(s)`:"cônjuge"} e patrimônio de ${formatMi(patrimonioTotal)}, sem planejamento sucessório seus herdeiros podem pagar ~${moedaFull(custoInventario)} em ITCMD + inventário + honorários (4-20% do patrimônio). VGBL, holding patrimonial e seguro de vida reduzem drasticamente esse custo.`,
-      cta:"Estruturação sucessória: VGBL + holding + seguro de vida.",
+    insights.push({nivel:patrimonioTotal>500000?"alto":"medio",icon:"👨‍👩‍👧",titulo:"Família desprotegida — sucessão em aberto",
+      texto:`${temFilhosDep?`${filhos.length} filho(s)`:"Cônjuge"} · patrimônio de ${formatMi(patrimonioTotal)} · sem plano sucessório. Se algo acontecer hoje, sua família pode pagar ~${moedaFull(custoInventario)} em ITCMD + inventário + honorários — e o processo pode levar 2-5 anos travando o acesso ao patrimônio.`,
+      cta:"Estruturar VGBL + holding + seguro de vida (resolve em 30 dias).",
+    });
+  }
+
+  // Seguro de vida — só alertar se tem dependentes E não tem seguro
+  if(temDependentes&&!temSeguroVidaFlag) {
+    const coberturaIdeal = Math.max(salario*12*10, 500000); // 10 anos de renda ou mínimo 500k
+    insights.push({nivel:"alto",icon:"🛡️",titulo:"Família sem seguro de vida",
+      texto:`Você tem ${temFilhosDep?`${filhos.length} filho(s)`:"cônjuge dependente"}${salario>0?` e renda de ${moedaFull(salario)}/mês`:""}. Um seguro de vida de ~${moedaFull(coberturaIdeal)} de cobertura custa tipicamente ${moedaFull(coberturaIdeal*0.0015/12)}-${moedaFull(coberturaIdeal*0.003/12)}/mês. Sem ele, a família perde renda + pode ter que vender ativos em momento ruim.`,
+      cta:"Cotação de seguro de vida integrada ao plano.",
+    });
+  }
+
+  // Previdência — oportunidade fiscal + aposentadoria
+  if(!temPrevidenciaFlag&&salario>0&&idade&&idade>=30&&idade<=55) {
+    insights.push({nivel:"info",icon:"📑",titulo:"Previdência privada: oportunidade fiscal",
+      texto:`PGBL permite deduzir até 12% da renda anual do IR (até ~${moedaFull(salario*12*0.12*0.275)} de economia/ano no seu caso). Além disso, previdência tem benefícios sucessórios fortes: não entra em inventário e tem alíquota regressiva de 10% no longo prazo.`,
+      cta:"Simular VGBL/PGBL com estratégia fiscal.",
     });
   }
 
@@ -361,21 +386,31 @@ function analisar(cliente) {
   }
 
   if(objetivos.includes("viagem")) {
-    insights.push({nivel:"info",icon:"✈️",titulo:"Viagens como objetivo",
-      texto:`Caixinha específica separa sonhos do capital principal — ativos de liquidez adequada a cada data. Evita tirar dinheiro da carteira em momento errado de mercado.`,
-      cta:"Caixinha de viagens com aporte automatizado.",
-    });
+    const viagem = cliente.proximaViagemPlanejada||"";
+    if(viagem) {
+      insights.push({nivel:"baixo",icon:"✈️",titulo:"Próxima viagem em vista",
+        texto:`"${viagem}". Vamos separar caixinha específica em renda fixa com vencimento alinhado à data — garante que o dinheiro esteja lá, sem risco de mercado no momento errado.`,
+        cta:"Estruturar caixinha de viagem com aporte automático.",
+      });
+    } else {
+      insights.push({nivel:"info",icon:"✈️",titulo:"Viagens como objetivo",
+        texto:`Caixinha específica separa sonhos do capital principal — ativos de liquidez adequada a cada data. Qual seria sua próxima viagem dos sonhos?`,
+        cta:"Definir destino, valor e data. A gente monta a caixinha.",
+      });
+    }
   }
 
   // ═══ PLANO DE AÇÃO 90 DIAS ═══
   const plano90 = [];
+  plano90.push({prazo:"Semana 1",acao:"Cadastrar carteira atual completa — ponto de partida de tudo"});
   if(sobra<0) plano90.push({prazo:"Semana 1-2",acao:"Mapear e cortar 15-20% de gastos para sair do vermelho"});
   if(reservaAtual<reservaIdeal&&reservaIdeal>0) plano90.push({prazo:"Mês 1",acao:`${mesesCobertos<3?"[URGENTE] ":""}Completar reserva de emergência (alvo: ${moedaFull(reservaIdeal)} em liquidez D+1)`});
   if(carrosSemSeguro>0) plano90.push({prazo:"Mês 1",acao:"Contratar seguro dos veículos expostos"});
+  if(temDependentes&&!temSeguroVidaFlag) plano90.push({prazo:"Mês 1",acao:"Cotar seguro de vida (cobertura de 10x renda anual)"});
   if(modeloAtend==="Comissionado (Commission Based)") plano90.push({prazo:"Mês 1",acao:"Análise de custos ocultos da carteira atual"});
-  if(rentAnual<11&&rentAnual>0) plano90.push({prazo:"Mês 2",acao:"Rebalancear carteira para rentabilidade-alvo compatível com perfil"});
+  if(rentAnual<12&&rentAnual>0) plano90.push({prazo:"Mês 2",acao:"Rebalancear carteira para rentabilidade-alvo de 12-14% a.a."});
   if(aporteMedio<metaAporte&&metaAporte>0) plano90.push({prazo:"Mês 2",acao:`Automatizar aporte mensal de ${moedaFull(metaAporte)} no dia ${cliente.diaAporte||"do salário"}`});
-  if((temConjuge||temFilhosDep)&&patrimonioTotal>300000) plano90.push({prazo:"Mês 2-3",acao:"Estruturar plano sucessório (VGBL + seguro de vida)"});
+  if(temDependentes&&!temPlanoSucessorioFlag&&patrimonioTotal>300000) plano90.push({prazo:"Mês 2-3",acao:"Estruturar plano sucessório (VGBL + holding + seguro de vida)"});
   if(objetivos.length>0) plano90.push({prazo:"Mês 3",acao:"Detalhar e dar valores a cada objetivo selecionado (caixinhas)"});
   plano90.push({prazo:"Mês 3",acao:"Revisão trimestral do plano e ajuste de rota"});
 
@@ -386,6 +421,8 @@ function analisar(cliente) {
     distribuicao, patrimonioTotal, patrimonioFinanceiro, valorImoveis, valorVeiculos,
     reservaIdeal, reservaAtual, liquidezDiaria, mesesCobertos, sobra, pctSobra,
     protecoes, plano90,
+    temDependentes, temFilhosDep, temConjuge, filhos, estadoCivil, objetivos,
+    carrosSemSeguro, pctImoveisTotal, temPlanoSucessorioFlag, temSeguroVidaFlag, temPrevidenciaFlag,
     salario, gastos, aporteMedio, metaAporte, rentAnual, rentReal, idade,
   };
 }
@@ -540,8 +577,12 @@ export default function Diagnostico() {
   );
 
   const a = analisar(cliente);
-  const altos = a.insights.filter(i=>i.nivel==="alto").length;
+  const insightsAltos = a.insights.filter(i=>i.nivel==="alto");
+  const altos = insightsAltos.length;
   const medios = a.insights.filter(i=>i.nivel==="medio").length;
+  const top3Riscos = insightsAltos.slice(0,3);
+  const carteiraCadastrada = a.patrimonioFinanceiro>0;
+  const fluxoCadastrado = a.gastos>0&&a.salario>0;
 
   return (
     <div style={{minHeight:"100vh",background:T.bg,fontFamily:T.fontFamily}}>
@@ -620,7 +661,79 @@ export default function Diagnostico() {
               <div style={{fontSize:20,fontWeight:400,color:"#22c55e"}}>{a.insights.length-altos-medios}</div>
             </div>
           </div>
+
+          {top3Riscos.length>0&&(
+            <div style={{position:"relative",marginTop:18,padding:"16px 18px",background:"rgba(239,68,68,0.06)",border:"0.5px solid rgba(239,68,68,0.28)",borderRadius:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <div style={{width:6,height:6,borderRadius:"50%",background:"#ef4444",boxShadow:"0 0 8px #ef4444"}}/>
+                <div style={{fontSize:10,color:"#fca5a5",textTransform:"uppercase",letterSpacing:"0.15em",fontWeight:600,...noEdit}}>Pontos que precisam de ação imediata</div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {top3Riscos.map((r,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,fontSize:13,color:T.textPrimary,lineHeight:1.4}}>
+                    <span style={{fontSize:15,flexShrink:0}}>{r.icon}</span>
+                    <span style={{flex:1,fontWeight:400}}>{r.titulo}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* ═══ SLIDE 2: CTA GRANDE — PRÓXIMO PASSO É A CARTEIRA ═══ */}
+        {!carteiraCadastrada&&(
+          <div style={{
+            position:"relative",overflow:"hidden",
+            background:"linear-gradient(135deg,rgba(240,162,2,0.14) 0%,rgba(240,162,2,0.04) 70%)",
+            border:"0.5px solid rgba(240,162,2,0.45)",
+            borderRadius:22,padding:"28px 26px",marginBottom:18,
+            boxShadow:"0 20px 50px -20px rgba(240,162,2,0.25)",
+          }}>
+            <div style={{position:"absolute",top:-80,right:-80,width:260,height:260,background:"radial-gradient(circle,rgba(240,162,2,0.22) 0%,transparent 60%)",pointerEvents:"none",filter:"blur(10px)"}}/>
+            <div style={{position:"relative"}}>
+              <div style={{fontSize:10,color:"#F0A202",textTransform:"uppercase",letterSpacing:"0.2em",marginBottom:10,fontWeight:600,...noEdit}}>Próximo passo · o mais importante</div>
+              <div style={{fontSize:22,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.01em",lineHeight:1.25,marginBottom:10}}>
+                Vamos ver sua carteira de investimentos
+              </div>
+              <div style={{fontSize:13,color:T.textSecondary,lineHeight:1.7,marginBottom:18,maxWidth:620}}>
+                Este é o coração do planejamento. Sem saber exatamente onde seu dinheiro está hoje, não conseguimos garantir que o caminho até a liberdade financeira seja o mais curto e seguro possível. Cada ativo tem um risco e um retorno — vamos revisar juntos <b style={{color:"#F0A202"}}>o que ajustar para você chegar lá mais rápido e com menos risco</b>.
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(180px, 1fr))",gap:10,marginBottom:20}}>
+                <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.2)",border:"0.5px solid rgba(240,162,2,0.2)",borderRadius:10}}>
+                  <div style={{fontSize:16,marginBottom:4}}>📊</div>
+                  <div style={{fontSize:11,color:T.textPrimary,fontWeight:500,lineHeight:1.3}}>Análise de diversificação</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>Evitar concentração em um único ativo</div>
+                </div>
+                <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.2)",border:"0.5px solid rgba(240,162,2,0.2)",borderRadius:10}}>
+                  <div style={{fontSize:16,marginBottom:4}}>⚖️</div>
+                  <div style={{fontSize:11,color:T.textPrimary,fontWeight:500,lineHeight:1.3}}>Grau de risco dos ativos</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>O que pode perder tudo vs. segurança</div>
+                </div>
+                <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.2)",border:"0.5px solid rgba(240,162,2,0.2)",borderRadius:10}}>
+                  <div style={{fontSize:16,marginBottom:4}}>🎯</div>
+                  <div style={{fontSize:11,color:T.textPrimary,fontWeight:500,lineHeight:1.3}}>Alinhamento com objetivos</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>Se vai te levar onde quer chegar</div>
+                </div>
+                <div style={{padding:"10px 12px",background:"rgba(0,0,0,0.2)",border:"0.5px solid rgba(240,162,2,0.2)",borderRadius:10}}>
+                  <div style={{fontSize:16,marginBottom:4}}>💸</div>
+                  <div style={{fontSize:11,color:T.textPrimary,fontWeight:500,lineHeight:1.3}}>Custos ocultos</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>Taxas que estão drenando seu retorno</div>
+                </div>
+              </div>
+              <button
+                onClick={()=>navigate(`/cliente/${id}/carteira`)}
+                style={{
+                  padding:"15px 28px",background:"linear-gradient(135deg,#F0A202,#c88502)",
+                  border:"0.5px solid rgba(240,162,2,0.6)",borderRadius:12,
+                  color:"#0D1321",fontSize:12,fontWeight:600,letterSpacing:"0.12em",
+                  textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit",
+                  boxShadow:"0 8px 24px rgba(240,162,2,0.35)",
+                }}>
+                Cadastrar carteira agora →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ═══ SCORE DETALHADO ═══ */}
         <SectionCard icon="🧭" titulo="Score Financeiro por Área" accent="#F0A202">
@@ -693,12 +806,85 @@ export default function Diagnostico() {
         )}
 
         {/* ═══ PROTEÇÃO PATRIMONIAL ═══ */}
-        <SectionCard icon="🛡️" titulo="Blindagem Patrimonial" subtitulo="Proteções essenciais para sua família e patrimônio" accent="#a78bfa">
-          <ProtecaoItem label="Reserva de emergência" ok={a.protecoes.reserva} desc={a.liquidezDiaria>0?`${moedaFull(a.liquidezDiaria)} em liquidez · ${a.mesesCobertos.toFixed(1)} meses cobertos (ideal: 6)`:`Ideal: ${moedaFull(a.reservaIdeal)} em liquidez`}/>
-          <ProtecaoItem label="Seguro de veículos" ok={a.protecoes.seguroCarro} desc="Proteção contra sinistros"/>
-          <ProtecaoItem label="Seguro de vida" ok={a.protecoes.seguroVida} desc="Proteção para dependentes"/>
-          <ProtecaoItem label="Planejamento sucessório" ok={a.protecoes.sucessao} desc="Evita ITCMD + inventário caro"/>
+        <SectionCard icon="🛡️" titulo="Blindagem Patrimonial" accent="#a78bfa">
+          <ProtecaoItem label="Reserva de emergência" ok={a.protecoes.reserva} desc={a.liquidezDiaria>0?`${moedaFull(a.liquidezDiaria)} · ${a.mesesCobertos.toFixed(1)} meses cobertos (ideal: 6)`:`Ideal: ${moedaFull(a.reservaIdeal)} em liquidez`}/>
+          <ProtecaoItem label="Seguro de veículos" ok={a.protecoes.seguroCarro} desc={a.carrosSemSeguro>0?`${a.carrosSemSeguro} veículo(s) sem seguro`:"Proteção contra sinistros"}/>
+          <ProtecaoItem label="Seguro de vida" ok={a.protecoes.seguroVida} desc={a.temDependentes?a.temSeguroVidaFlag?"Cobertura contratada":"Família exposta em caso de imprevistos":"Sem dependentes financeiros"}/>
+          <ProtecaoItem label="Previdência privada" ok={a.protecoes.previdencia} desc={a.temPrevidenciaFlag?"VGBL/PGBL ativo":"Oportunidade fiscal + sucessão"}/>
+          <ProtecaoItem label="Planejamento sucessório" ok={a.protecoes.sucessao} desc={a.temDependentes?a.temPlanoSucessorioFlag?"Estruturado":"Evita ITCMD + inventário (4-20% do patrimônio)":"Sem dependentes"}/>
         </SectionCard>
+
+        {/* ═══ FAMÍLIA — só aparece quando tem dependentes ═══ */}
+        {a.temDependentes&&(
+          <SectionCard icon="👨‍👩‍👧" titulo="Sua Família" subtitulo="Planejamento para quem depende de você" accent="#ec4899">
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(220px, 1fr))",gap:12}}>
+              {a.temConjuge&&(
+                <div style={{padding:"14px 16px",background:"rgba(236,72,153,0.06)",border:"0.5px solid rgba(236,72,153,0.22)",borderRadius:12}}>
+                  <div style={{fontSize:18,marginBottom:6}}>💍</div>
+                  <div style={{fontSize:13,color:T.textPrimary,fontWeight:500,marginBottom:4}}>{a.estadoCivil}</div>
+                  <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>Regime de bens e sucessão precisam estar alinhados. VGBL nominado ao cônjuge acelera transmissão.</div>
+                </div>
+              )}
+              {a.filhos.length>0&&(
+                <div style={{padding:"14px 16px",background:"rgba(96,165,250,0.06)",border:"0.5px solid rgba(96,165,250,0.22)",borderRadius:12}}>
+                  <div style={{fontSize:18,marginBottom:6}}>🎓</div>
+                  <div style={{fontSize:13,color:T.textPrimary,fontWeight:500,marginBottom:4}}>{a.filhos.length} filho(s)</div>
+                  <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>{a.objetivos.includes("educacao")?"Educação marcada como objetivo. Vamos dimensionar caixinha por filho.":"Educação (faculdade) pode custar R$ 400k+ por filho. Caixinha dedicada."}</div>
+                </div>
+              )}
+              <div style={{padding:"14px 16px",background:"rgba(167,139,250,0.06)",border:"0.5px solid rgba(167,139,250,0.22)",borderRadius:12}}>
+                <div style={{fontSize:18,marginBottom:6}}>🏛️</div>
+                <div style={{fontSize:13,color:T.textPrimary,fontWeight:500,marginBottom:4}}>Sucessão patrimonial</div>
+                <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>{a.temPlanoSucessorioFlag?"Estrutura já montada. Revisão periódica garante alinhamento.":"Sem plano, inventário pode levar 2-5 anos e custar 4-20% do patrimônio."}</div>
+              </div>
+              {a.objetivos.includes("viagem")&&(
+                <div style={{padding:"14px 16px",background:"rgba(34,197,94,0.06)",border:"0.5px solid rgba(34,197,94,0.22)",borderRadius:12}}>
+                  <div style={{fontSize:18,marginBottom:6}}>✈️</div>
+                  <div style={{fontSize:13,color:T.textPrimary,fontWeight:500,marginBottom:4}}>{cliente.proximaViagemPlanejada?cliente.proximaViagemPlanejada:"Próxima viagem"}</div>
+                  <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>{cliente.proximaViagemPlanejada?"Caixinha com vencimento alinhado à data da viagem.":"Qual seria sua próxima viagem em família? Vamos planejar sem tirar do capital principal."}</div>
+                </div>
+              )}
+              {a.objetivos.includes("imovel")&&(
+                <div style={{padding:"14px 16px",background:"rgba(240,162,2,0.06)",border:"0.5px solid rgba(240,162,2,0.22)",borderRadius:12}}>
+                  <div style={{fontSize:18,marginBottom:6}}>🏡</div>
+                  <div style={{fontSize:13,color:T.textPrimary,fontWeight:500,marginBottom:4}}>Casa dos sonhos</div>
+                  <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>Comprar vs. carteira geradora de renda. Cálculo em 20 anos costuma favorecer a carteira — mas qualidade de vida conta.</div>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+        )}
+
+        {/* ═══ CTA FLUXO MENSAL — "Onde você gasta" ═══ */}
+        {!fluxoCadastrado&&(
+          <div style={{
+            position:"relative",overflow:"hidden",
+            background:"linear-gradient(135deg,rgba(34,197,94,0.10) 0%,rgba(34,197,94,0.02) 70%)",
+            border:"0.5px solid rgba(34,197,94,0.35)",
+            borderRadius:22,padding:"24px 24px",marginBottom:18,
+          }}>
+            <div style={{position:"absolute",bottom:-80,right:-80,width:240,height:240,background:"radial-gradient(circle,rgba(34,197,94,0.18) 0%,transparent 60%)",pointerEvents:"none",filter:"blur(10px)"}}/>
+            <div style={{position:"relative"}}>
+              <div style={{fontSize:10,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.2em",marginBottom:10,fontWeight:600,...noEdit}}>Próximo capítulo</div>
+              <div style={{fontSize:20,fontWeight:300,color:T.textPrimary,letterSpacing:"-0.01em",lineHeight:1.25,marginBottom:10}}>
+                Descobrir onde seu dinheiro realmente vai
+              </div>
+              <div style={{fontSize:13,color:T.textSecondary,lineHeight:1.7,marginBottom:16,maxWidth:620}}>
+                A maioria das famílias descobre, ao abrir o fluxo mensal detalhado, <b style={{color:"#86efac"}}>15-25% de gastos que não agregam</b>. Esse valor, direcionado para investimentos, pode antecipar sua liberdade financeira em anos.
+              </div>
+              <button
+                onClick={()=>navigate(`/cliente/${id}/fluxo`)}
+                style={{
+                  padding:"13px 24px",background:"rgba(34,197,94,0.15)",
+                  border:"0.5px solid rgba(34,197,94,0.45)",borderRadius:11,
+                  color:"#22c55e",fontSize:11,fontWeight:600,letterSpacing:"0.12em",
+                  textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit",
+                }}>
+                Abrir fluxo mensal detalhado →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ═══ INSIGHTS ═══ */}
         {a.insights.length>0&&(

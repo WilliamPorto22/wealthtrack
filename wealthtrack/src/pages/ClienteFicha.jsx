@@ -559,6 +559,10 @@ export default function ClienteFicha() {
     salarioMensal:"",metaAporteMensal:"",aporteMedio:"",diaAporte:"",
     rentabilidadeAnual:"",focoInvestimento:"",
     liquidezDiaria:"",
+    temSeguroVida:null,valorSeguroVida:"",
+    temPlanoSucessorio:null,
+    temPrevidencia:null,
+    proximaViagemPlanejada:"",
     imoveis:[],veiculos:[],veiculoValor:"",
     objetivosInteresse:[],
   });
@@ -999,7 +1003,7 @@ export default function ClienteFicha() {
               <div style={{fontSize:13,color:T.textSecondary,lineHeight:1.5,letterSpacing:"0.01em",...noEdit}}>
                 {[snap.profissao,snap.uf?snap.uf.split("–")[0].trim():null,idade?`${idade} anos`:null].filter(Boolean).join(" · ")}
               </div>
-              {(()=>{
+              {id!=="novo"&&(()=>{
                 const st = revisaoAgendada
                   ? {cor:"#60a5fa",bg:"rgba(96,165,250,0.1)",br:"rgba(96,165,250,0.32)",lbl:`Agendada para ${dataRevisao}`}
                   : pendente
@@ -1113,44 +1117,45 @@ export default function ClienteFicha() {
           )}
 
           {/* KPI strip — grade 2×2 premium */}
+          {id!=="novo"&&(
           <div style={{position:"relative",display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10}}>
             {/* Patrimônio Total */}
             <div style={{position:"relative",background:"linear-gradient(135deg,rgba(34,197,94,0.09),rgba(34,197,94,0.02))",border:"0.5px solid rgba(34,197,94,0.22)",borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
               <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:"radial-gradient(circle,rgba(34,197,94,0.12) 0%,transparent 70%)",pointerEvents:"none"}}/>
-              <div style={{position:"relative",fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Patrimônio Total</div>
+              <div style={{position:"relative",fontSize:9,color:"#86efac",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:700,opacity:1}}>Patrimônio Total</div>
               <div style={{position:"relative",fontSize:18,fontWeight:500,color:"#22c55e",lineHeight:1.2,letterSpacing:"-0.01em",wordBreak:"break-word"}}>
                 {patrimonioDisplay>0?moedaFull(patrimonioDisplay):"—"}
               </div>
               {totalCarteira>0&&totalImoveis+totalVeiculos>0&&(
-                <div style={{position:"relative",fontSize:12,color:"#4ade80",marginTop:6,opacity:0.92,letterSpacing:"0.01em",fontWeight:500}}>inclui imóveis e veículos</div>
+                <div style={{position:"relative",fontSize:12,color:"#4ade80",marginTop:6,opacity:1,letterSpacing:"0.01em",fontWeight:500}}>inclui imóveis e veículos</div>
               )}
             </div>
             {/* Patrimônio Financeiro */}
             <div style={{position:"relative",background:"linear-gradient(135deg,rgba(240,162,2,0.09),rgba(240,162,2,0.02))",border:"0.5px solid rgba(240,162,2,0.22)",borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
               <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:"radial-gradient(circle,rgba(240,162,2,0.14) 0%,transparent 70%)",pointerEvents:"none"}}/>
-              <div style={{position:"relative",fontSize:9,color:"#fcd34d",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Patrimônio Financeiro</div>
+              <div style={{position:"relative",fontSize:9,color:"#fcd34d",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:700,opacity:1}}>Patrimônio Financeiro</div>
               <div style={{position:"relative",fontSize:18,fontWeight:500,color:"#F0A202",lineHeight:1.2,letterSpacing:"-0.01em",wordBreak:"break-word"}}>
                 {patrimonioFinanceiro>0?moedaFull(patrimonioFinanceiro):"—"}
               </div>
               {patrimonioFinanceiro>0&&(
-                <div style={{position:"relative",fontSize:12,color:"#fbbf24",marginTop:6,opacity:0.92,letterSpacing:"0.01em",fontWeight:500}}>somente investimentos</div>
+                <div style={{position:"relative",fontSize:12,color:"#fbbf24",marginTop:6,opacity:1,letterSpacing:"0.01em",fontWeight:500}}>somente investimentos</div>
               )}
             </div>
             {/* Renda Mensal */}
             <div style={{position:"relative",background:"linear-gradient(135deg,rgba(96,165,250,0.09),rgba(96,165,250,0.02))",border:"0.5px solid rgba(96,165,250,0.22)",borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
               <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:"radial-gradient(circle,rgba(96,165,250,0.12) 0%,transparent 70%)",pointerEvents:"none"}}/>
-              <div style={{position:"relative",fontSize:9,color:"#93c5fd",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Renda Mensal</div>
+              <div style={{position:"relative",fontSize:9,color:"#93c5fd",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:700,opacity:1}}>Renda Mensal</div>
               <div style={{position:"relative",fontSize:18,fontWeight:500,color:"#60a5fa",lineHeight:1.2,letterSpacing:"-0.01em",wordBreak:"break-word"}}>
                 {rendaMensal>0?moedaFull(rendaMensal):"—"}
               </div>
               {gastosMensaisEfetivo>0&&rendaMensal>0&&(
-                <div style={{position:"relative",fontSize:12,color:"#93c5fd",marginTop:6,opacity:0.92,letterSpacing:"0.01em",fontWeight:500}}>gastos: {moedaFull(gastosMensaisEfetivo)}/mês</div>
+                <div style={{position:"relative",fontSize:12,color:"#93c5fd",marginTop:6,opacity:1,letterSpacing:"0.01em",fontWeight:500}}>gastos: {moedaFull(gastosMensaisEfetivo)}/mês</div>
               )}
             </div>
             {/* Reserva de Emergência com status */}
             <div style={{position:"relative",background:reservaStatus.bg,border:reservaStatus.border,borderRadius:14,padding:"14px 15px",overflow:"hidden",...noEdit}}>
               <div style={{position:"absolute",top:-30,right:-30,width:90,height:90,background:`radial-gradient(circle,${reservaStatus.cor}1f 0%,transparent 70%)`,pointerEvents:"none"}}/>
-              <div style={{position:"relative",fontSize:9,color:reservaStatus.labelCor,textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:600,opacity:0.9}}>Reserva Emergência</div>
+              <div style={{position:"relative",fontSize:9,color:reservaStatus.labelCor,textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8,fontWeight:700,opacity:1}}>Reserva Emergência</div>
               <div style={{position:"relative",fontSize:15,fontWeight:600,color:reservaStatus.cor,lineHeight:1.2,marginBottom:4,letterSpacing:"-0.01em"}}>
                 {reservaStatus.label}
               </div>
@@ -1164,6 +1169,7 @@ export default function ClienteFicha() {
               )}
             </div>
           </div>
+          )}
         </div>
 
         {/* Feedback */}
@@ -1447,7 +1453,7 @@ export default function ClienteFicha() {
                     allowDeselect={false}
                     onChange={val=>{
                       if(val==="Sim") atualizarVeiculo(i,"temSeguro",true);
-                      else if(val==="Não") {atualizarVeiculo(i,"temSeguro",false);atualizarVeiculo(i,"valorSeguro","");}
+                      else if(val==="Não"){const n=(snap.veiculos||[]).map((vv,idx)=>idx===i?{...vv,temSeguro:false,valorSeguro:""}:vv);setFSnap("veiculos",n);}
                     }}
                     options={["Sim","Não"]}
                   />
@@ -1463,6 +1469,67 @@ export default function ClienteFicha() {
             <button onClick={adicionarVeiculo} style={{padding:"10px 16px",background:"rgba(96,165,250,0.06)",border:"0.5px solid rgba(96,165,250,0.25)",borderRadius:9,color:"#60a5fa",fontSize:11,cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.06em"}}>
               + Adicionar veículo
             </button>
+
+            {/* ═══ SEÇÃO 7.5: PROTEÇÃO, SUCESSÃO E PREVIDÊNCIA ═══════════ */}
+            <SectionTitle icon="🛡️" subtitle="Blindagem para imprevistos e transferência para próximas gerações">Proteção, Sucessão e Previdência</SectionTitle>
+
+            <div style={{marginBottom:16}}>
+              <Lbl>Possui seguro de vida?</Lbl>
+              <PillChoice
+                value={snap.temSeguroVida===true?"Sim":snap.temSeguroVida===false?"Não":""}
+                allowDeselect={false}
+                onChange={val=>{
+                  if(val==="Sim") setFSnap("temSeguroVida",true);
+                  else if(val==="Não"){setFSnap("temSeguroVida",false);setFSnap("valorSeguroVida","");setFSnap("coberturaSeguroVida","");}
+                }}
+                options={["Sim","Não"]}
+              />
+            </div>
+            {snap.temSeguroVida===true&&(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:12,marginBottom:16}}>
+                <div>
+                  <Lbl>Prêmio mensal (R$)</Lbl>
+                  <InputMoeda key={`sv-${id}`} initValue={snap.valorSeguroVida} onCommit={v=>setFSnap("valorSeguroVida",v)}/>
+                </div>
+                <div>
+                  <Lbl>Cobertura / Capital segurado (R$)</Lbl>
+                  <InputMoeda key={`svc-${id}`} initValue={snap.coberturaSeguroVida} onCommit={v=>setFSnap("coberturaSeguroVida",v)}/>
+                </div>
+              </div>
+            )}
+
+            <div style={{marginBottom:16}}>
+              <Lbl>Já possui planejamento sucessório? <span style={{color:T.textMuted,textTransform:"none",letterSpacing:0,fontSize:10}}>(VGBL, holding, testamento)</span></Lbl>
+              <PillChoice
+                value={snap.temPlanoSucessorio===true?"Sim":snap.temPlanoSucessorio===false?"Não":""}
+                allowDeselect={false}
+                onChange={val=>{
+                  if(val==="Sim") setFSnap("temPlanoSucessorio",true);
+                  else if(val==="Não") setFSnap("temPlanoSucessorio",false);
+                }}
+                options={["Sim","Não"]}
+              />
+            </div>
+
+            <div style={{marginBottom:16}}>
+              <Lbl>Possui previdência privada? <span style={{color:T.textMuted,textTransform:"none",letterSpacing:0,fontSize:10}}>(VGBL/PGBL)</span></Lbl>
+              <PillChoice
+                value={snap.temPrevidencia===true?"Sim":snap.temPrevidencia===false?"Não":""}
+                allowDeselect={false}
+                onChange={val=>{
+                  if(val==="Sim") setFSnap("temPrevidencia",true);
+                  else if(val==="Não") setFSnap("temPrevidencia",false);
+                }}
+                options={["Sim","Não"]}
+              />
+            </div>
+
+            {(snap.objetivosInteresse||[]).includes("viagem")&&(
+              <div style={{marginBottom:16}}>
+                <Lbl>Próxima viagem já planejada? <span style={{color:T.textMuted,textTransform:"none",letterSpacing:0,fontSize:10}}>(destino e quando)</span></Lbl>
+                <InputTexto key={`viag-${id}`} initValue={snap.proximaViagemPlanejada} onCommit={v=>setFSnap("proximaViagemPlanejada",v)} placeholder="Ex: Europa em dez/2026 · ~R$ 40k"/>
+              </div>
+            )}
 
             {/* ═══ SEÇÃO 8: MODELO DE ATENDIMENTO E CARTEIRA ════════════ */}
             <SectionTitle icon="📈" subtitle="Como é atendido hoje e estilo de investimento">Atendimento Atual e Perfil de Investidor</SectionTitle>
