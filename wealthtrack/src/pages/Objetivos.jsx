@@ -62,7 +62,7 @@ function classificar(anosNec, prazo) {
 }
 
 function brl(v) {
-  return Math.round(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return Math.round(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function moedaStr(centavos) {
@@ -222,7 +222,7 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
           </div>
         </div>
         <div style={{ fontSize: 13, color: marcado ? T.gold : T.textSecondary, fontWeight: 600, flexShrink: 0 }}>
-          {a.valorReais.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          {a.valorReais.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
       </div>
     );
@@ -244,7 +244,7 @@ function AtivosPicker({ carteira, tipoObjetivo, selecionados, setSelecionados, t
             {selecionados.size} {selecionados.size === 1 ? "ativo vinculado" : "ativos vinculados"}
           </div>
           <div style={{ fontSize: 18, color: T.gold, fontWeight: 600 }}>
-            {totalCalculado.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            {totalCalculado.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
         <div style={{ fontSize: 10, color: T.textMuted, textAlign: "right", lineHeight: 1.5 }}>
@@ -775,7 +775,7 @@ export default function Objetivos() {
                     inputMode="numeric"
                     value={form.rendaMensal ? (parseCentavos(form.rendaMensal)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                     onChange={e => {
-                      const centavos = parseCentavos(e.target.value) * 100;
+                      const centavos = parseCentavos(e.target.value);
                       setF("rendaMensal", String(centavos));
                       if (centavos > 0) {
                         const rendaReais = centavos / 100;
@@ -817,7 +817,7 @@ export default function Objetivos() {
                     inputMode="numeric"
                     value={form.meta ? (parseCentavos(form.meta)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                     onChange={e => {
-                      const centavos = parseCentavos(e.target.value) * 100;
+                      const centavos = parseCentavos(e.target.value);
                       setF("meta", String(centavos));
                     }}
                   />
@@ -883,7 +883,7 @@ export default function Objetivos() {
                 <input style={{ ...C.input, fontSize:16, padding:"14px 16px" }} placeholder="R$ 0" type="text" inputMode="numeric"
                   value={form.patrimAtual ? (parseCentavos(form.patrimAtual)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                   onChange={e => {
-                    const centavos = parseCentavos(e.target.value) * 100;
+                    const centavos = parseCentavos(e.target.value);
                     setF("patrimAtual", String(centavos));
                   }} />
                 <div style={{ fontSize:11, color:T.textMuted, marginTop:8, lineHeight:1.6 }}>
@@ -906,7 +906,7 @@ export default function Objetivos() {
               <input style={{ ...C.input, fontSize:16, padding:"14px 16px" }} placeholder="R$ 0" type="text" inputMode="numeric"
                 value={form.aporte ? (parseCentavos(form.aporte)/100).toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2}) : ""}
                 onChange={e => {
-                  const centavos = parseCentavos(e.target.value) * 100;
+                  const centavos = parseCentavos(e.target.value);
                   setF("aporte", String(centavos));
                 }} />
             </div>

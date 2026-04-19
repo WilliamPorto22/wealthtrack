@@ -21,9 +21,9 @@ export const CLASSES_CARTEIRA = [
 export const TIPO_OBJETIVO_PARA_LABEL = {
   aposentadoria:       "Aposentadoria",
   imovel:              "Aquisição de Imóvel",
-  liquidez:            "Reserva de Emergência",
-  carro:               "Compra de veículo",
-  oportunidade:        "Reserva de Oportunidade",
+  liquidez:            "Liquidez",
+  carro:               "Compra de carro",
+  oportunidade:        "Oportunidade",
   viagem:              "Viagem",
   educacao:            "Educação",
   saude:               "Saúde",

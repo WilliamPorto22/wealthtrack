@@ -258,7 +258,8 @@ function BarChartVertical({items}) {
     return `R$ ${v}`;
   }
   return (
-    <svg viewBox={`0 0 ${totalW} ${totalH}`} width="100%" style={{display:"block",overflow:"visible",...noEdit}}>
+    <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",width:"100%"}}>
+    <svg viewBox={`0 0 ${totalW} ${totalH}`} height={180} preserveAspectRatio="xMidYMid meet" style={{display:"block",maxWidth:"100%",overflow:"visible",...noEdit}}>
       {/* Grid + Y labels */}
       {ticks.map((t,i)=>(
         <g key={i}>
@@ -282,6 +283,7 @@ function BarChartVertical({items}) {
       {/* Baseline */}
       <line x1={leftPad} y1={topPad+H} x2={totalW-4} y2={topPad+H} stroke="rgba(255,255,255,0.12)" strokeWidth={0.5}/>
     </svg>
+    </div>
   );
 }
 
